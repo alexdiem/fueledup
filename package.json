@@ -1,0 +1,11 @@
+{
+  "name": "fueledup",
+  "version": "0.1.0",
+  "description": "Ride nutrition planner — upload a GPX or describe your ride and get a carb, calorie, and hydration plan.",
+  "type": "module",
+  "scripts": {
+    "start": "python3 -m http.server 8080",
+    "test": "node --test tests/*.test.js"
+  },
+  "license": "BSD-3-Clause"
+}
