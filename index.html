@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>FueledUp — ride nutrition planner</title>
+  <link rel="stylesheet" href="css/style.css" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🚴</text></svg>" />
+</head>
+<body class="viz-root">
+  <header class="site-header">
+    <div class="wrap">
+      <div class="brand">🚴 FueledUp</div>
+      <div class="tagline">Know exactly what to eat and drink on your next ride.</div>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <form id="plan-form" class="card" novalidate>
+      <div class="grid-2">
+        <section>
+          <h2>Your ride</h2>
+          <div class="tabs" role="tablist">
+            <button type="button" id="tab-gpx" role="tab" aria-selected="true">GPX file</button>
+            <button type="button" id="tab-manual" role="tab" aria-selected="false">Describe it</button>
+          </div>
+
+          <div id="panel-gpx" role="tabpanel">
+            <label class="file-drop">
+              <input type="file" id="gpx-file" accept=".gpx" />
+              <span><strong>Choose a GPX file</strong> exported from Strava, Komoot, RideWithGPS…</span>
+            </label>
+            <button type="button" id="load-sample" class="link-btn">or load the sample ride</button>
+            <p id="gpx-status" class="status" aria-live="polite"></p>
+          </div>
+
+          <div id="panel-manual" role="tabpanel" hidden>
+            <div class="field-row">
+              <label>Distance
+                <span class="input-unit"><input type="number" id="distance" min="1" max="600" step="1" placeholder="80" /><span>km</span></span>
+              </label>
+              <label>Elevation gain
+                <span class="input-unit"><input type="number" id="elevation" min="0" max="10000" step="10" placeholder="600" /><span>m</span></span>
+              </label>
+            </div>
+          </div>
+
+          <div class="field-row">
+            <label>Effort
+              <select id="intensity">
+                <option value="casual">Casual — coffee ride</option>
+                <option value="endurance" selected>Endurance — steady</option>
+                <option value="brisk">Brisk — pushing on</option>
+                <option value="race">Race pace</option>
+              </select>
+            </label>
+            <label>Temperature
+              <span class="input-unit"><input type="number" id="temp" value="18" min="-10" max="45" step="1" /><span>°C</span></span>
+            </label>
+          </div>
+        </section>
+
+        <section>
+          <h2>You</h2>
+          <div class="field-row">
+            <label>Weight
+              <span class="input-unit"><input type="number" id="weight" value="70" min="30" max="150" step="1" /><span>kg</span></span>
+            </label>
+            <label>FTP <span class="muted">(optional)</span>
+              <span class="input-unit"><input type="number" id="ftp" min="50" max="500" step="5" placeholder="auto" /><span>W</span></span>
+            </label>
+          </div>
+          <label>If you don't know your FTP, how much do you ride?
+            <select id="level">
+              <option value="new">I'm new to cycling</option>
+              <option value="occasional">Occasionally</option>
+              <option value="regular" selected>A few times a week</option>
+              <option value="competitive">I train and race</option>
+            </select>
+          </label>
+        </section>
+      </div>
+
+      <p id="form-error" class="status error" hidden></p>
+      <button type="submit" class="cta">Build my fueling plan</button>
+    </form>
+
+    <section id="results" hidden>
+      <div class="card">
+        <h2 id="ride-title"></h2>
+        <p id="ride-sub" class="muted"></p>
+        <div id="tiles" class="tiles"></div>
+      </div>
+
+      <div class="card">
+        <h3>Route &amp; fueling points</h3>
+        <div class="legend">
+          <span><span class="dot dot-eat"></span>Eat</span>
+          <span><span class="dot dot-drink"></span>Finish a bottle</span>
+        </div>
+        <div id="chart"></div>
+      </div>
+
+      <div class="grid-2">
+        <div class="card">
+          <h3>In-ride timeline</h3>
+          <table class="timeline">
+            <thead><tr><th>Time</th><th>At</th><th>What</th></tr></thead>
+            <tbody id="timeline-body"></tbody>
+          </table>
+          <p id="burn-note" class="muted small"></p>
+        </div>
+        <div class="card">
+          <h3>Pack this</h3>
+          <ul id="shopping-list" class="shopping"></ul>
+          <h3>Before &amp; after</h3>
+          <p><strong>Pre-ride:</strong> <span id="meal-pre"></span></p>
+          <p><strong>Recovery:</strong> <span id="meal-post"></span></p>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="wrap muted small">
+    Estimates based on a physics power model and standard sports-nutrition guidelines.
+    Not medical advice — trial your fueling in training, never on race day.
+  </footer>
+
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
