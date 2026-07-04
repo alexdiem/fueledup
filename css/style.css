@@ -14,6 +14,9 @@
   --cta: #2a78d6;
   --cta-ink: #ffffff;
   --error: #d03b3b;
+  --tone-good: #006300;
+  --tone-warn: #9a6a00;
+  --tone-serious: #b4441f;
 }
 @media (prefers-color-scheme: dark) {
   .viz-root {
@@ -30,6 +33,9 @@
     --marker-drink: #199e70;
     --cta: #3987e5;
     --error: #e66767;
+    --tone-good: #0ca30c;
+    --tone-warn: #fab219;
+    --tone-serious: #ec835a;
   }
 }
 
@@ -89,6 +95,58 @@ input:focus, select:focus { outline: 2px solid var(--series-1); outline-offset: 
   position: absolute; right: 10px; top: 50%; transform: translateY(-38%);
   color: var(--muted); font-size: 0.85rem; pointer-events: none;
 }
+
+/* Brand picker */
+.brand-picker {
+  display: flex;
+  gap: 10px;
+  border: none;
+  padding: 0;
+  margin: 0 0 12px;
+}
+.brand-picker legend {
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+  padding: 0;
+  margin-bottom: 6px;
+}
+.brand-option {
+  flex: 1;
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  border: 1.5px solid var(--axis);
+  border-radius: 10px;
+  padding: 10px 12px;
+  cursor: pointer;
+  margin-bottom: 0;
+}
+.brand-option:has(input:checked) {
+  border-color: var(--series-1);
+  background: color-mix(in srgb, var(--series-1) 8%, transparent);
+}
+.brand-option input {
+  width: auto;
+  margin-top: 3px;
+  accent-color: var(--series-1);
+}
+
+/* Tonicity badges — status color + always a text label, never color alone */
+.badge {
+  display: inline-block;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  border: 1px solid currentColor;
+  white-space: nowrap;
+}
+.tone-good { color: var(--tone-good); }
+.tone-warn { color: var(--tone-warn); }
+.tone-serious { color: var(--tone-serious); }
+
+.mix-notes { margin: 10px 0 0; padding-left: 20px; color: var(--text-secondary); }
+.mix-notes li { margin: 4px 0; }
 
 .tabs { display: flex; gap: 6px; margin-bottom: 12px; }
 .tabs button {
