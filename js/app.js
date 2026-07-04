@@ -1,6 +1,6 @@
 import { parseGpx, buildRoute } from "./gpx.js";
 import { simulateRide, syntheticSegments, estimateFtp, INTENSITIES } from "./physics.js";
-import { buildPlan, mealAdvice, BOTTLE_ML } from "./nutrition.js";
+import { buildPlan, mealAdvice } from "./nutrition.js";
 import { renderChart } from "./chart.js";
 
 const $ = (id) => document.getElementById(id);
@@ -58,7 +58,8 @@ function generate() {
   if (!Number.isFinite(rider.weightKg) || rider.weightKg <= 0) {
     return showFormError("Enter your weight first.");
   }
-  const tempC = parseFloat($("temp").value) || 18;
+  const tempInput = parseFloat($("temp").value);
+  const tempC = Number.isFinite(tempInput) ? tempInput : 18; // 0 °C is valid!
 
   let profile;
   let segments;
@@ -79,8 +80,9 @@ function generate() {
   }
   showFormError("");
 
+  const brand = document.querySelector('input[name="brand"]:checked')?.value ?? "maurten";
   const sim = simulateRide(segments, rider);
-  const plan = buildPlan(sim, tempC);
+  const plan = buildPlan(sim, tempC, brand);
 
   // Map event times to route distances via the per-point cumulative time.
   for (const ev of plan.events) {
@@ -111,7 +113,7 @@ function renderResults(title, rider, sim, plan, tempC, profile) {
   $("ride-title").textContent = title;
   $("ride-sub").textContent =
     `${(sim.distM / 1000).toFixed(1)} km · ${INTENSITIES[$("intensity").value].label} ` +
-    `(~${sim.targetPower} W) · ${tempC} °C`;
+    `(~${sim.targetPower} W) · ${tempC} °C · fueled by ${plan.brand}`;
 
   $("tiles").innerHTML = [
     statTile(fmtDuration(sim.durationS), "", "Est. ride time"),
@@ -138,11 +140,29 @@ function renderResults(title, rider, sim, plan, tempC, profile) {
   $("timeline-body").innerHTML = rows.join("") ||
     `<tr><td colspan="3">Short ride — a bottle of water is all you need. 🎉</td></tr>`;
 
+  // Bottles & mixing (osmolality per drink)
+  const toneClass = {
+    hypotonic: "tone-good",
+    isotonic: "tone-good",
+    "mildly hypertonic": "tone-warn",
+    hypertonic: "tone-serious",
+  };
+  const drinkRows = plan.drinks.map((d) => {
+    const osm = d.carbsG > 0
+      ? `<td>${d.concentrationPct.toFixed(1)}%</td>
+         <td>${d.mOsm} mOsm/kg <span class="badge ${toneClass[d.tonicity]}">${d.tonicity}</span></td>`
+      : `<td>–</td><td><span class="badge tone-good">hydrates fast</span></td>`;
+    const note = d.note ? `<div class="muted small">${d.note}</div>` : "";
+    return `<tr><td>${d.count} ×</td><td>${d.recipe}${note}</td>${osm}</tr>`;
+  });
+  $("mixing-body").innerHTML = drinkRows.join("") ||
+    `<tr><td colspan="4">No bottles needed — it's a short one.</td></tr>`;
+  $("mix-notes").innerHTML = plan.notes.map((n) => `<li>${n}</li>`).join("");
+  $("mix-notes").hidden = plan.notes.length === 0;
+
   // Shopping list
-  const items = plan.shopping.map((s) => `<li>${s.count} × ${s.label}</li>`);
-  items.push(`<li>${plan.bottles} × ${BOTTLE_ML} ml bottle${plan.bottles > 1 ? "s" : ""} ` +
-    `<span class="muted">(~${plan.sodiumPerHour} mg sodium/h — use electrolyte mix)</span></li>`);
-  $("shopping-list").innerHTML = items.join("");
+  $("shopping-list").innerHTML =
+    plan.shopping.map((s) => `<li>${s.count} × ${s.label}</li>`).join("");
 
   // Burn vs intake note
   $("burn-note").textContent =

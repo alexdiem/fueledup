@@ -6,6 +6,9 @@ import {
   fluidPerHour,
   buildPlan,
   mealAdvice,
+  estimateOsmolality,
+  classifyTonicity,
+  BRANDS,
   GUT_CAP_G_PER_H,
 } from "../js/nutrition.js";
 
@@ -30,39 +33,98 @@ test("hot days need more fluid", () => {
   assert.ok(fluidPerHour(45) <= 1000);
 });
 
-const sim3h = {
-  durationS: 3 * 3600,
-  kcal: 1800,
-  intensityFactor: 0.68,
-  cumTime: [0],
-};
+// --- Osmolality ------------------------------------------------------------
 
-test("buildPlan schedules eat events covering roughly the carb total", () => {
-  const plan = buildPlan(sim3h, 18);
-  const eats = plan.events.filter((e) => e.type === "eat");
-  assert.ok(eats.length >= 4, `got ${eats.length} eat events`);
+test("osmolality rises with concentration and falls with chain length", () => {
+  const tw = BRANDS.tailwind.species;
+  assert.ok(estimateOsmolality(120, tw) > estimateOsmolality(60, tw));
+  // Same concentration: maltodextrin-based reads far lower than monomers.
+  assert.ok(
+    estimateOsmolality(160, BRANDS.maurten.species) <
+    estimateOsmolality(160, BRANDS.tailwind.species) * 0.75
+  );
+});
+
+test("tonicity bands classify sensibly", () => {
+  assert.equal(classifyTonicity(150), "hypotonic");
+  assert.equal(classifyTonicity(290), "isotonic");
+  assert.equal(classifyTonicity(420), "mildly hypertonic");
+  assert.equal(classifyTonicity(600), "hypertonic");
+});
+
+test("Maurten DM160 is ~isotonic, DM320 is hypertonic (hydrogel-noted)", () => {
+  const sim = { durationS: 2.5 * 3600, kcal: 1500, intensityFactor: 0.68, cumTime: [0] };
+  const iso = buildPlan(sim, 18, "maurten");
+  const dm160 = iso.drinks.find((d) => d.recipe.includes("160"));
+  assert.ok(dm160, "2.5 h endurance ride should use Drink Mix 160");
+  assert.equal(dm160.tonicity, "isotonic");
+
+  const race = { durationS: 4.5 * 3600, kcal: 4000, intensityFactor: 0.88, cumTime: [0] };
+  const hyper = buildPlan(race, 18, "maurten");
+  const dm320 = hyper.drinks.find((d) => d.recipe.includes("320"));
+  assert.ok(dm320, "long race-pace ride should use Drink Mix 320");
+  assert.ok(dm320.mOsm > 340, `got ${dm320.mOsm}`);
+  assert.ok(dm320.note?.includes("Hydrogel"), "hypertonic Maurten mix carries the hydrogel note");
+});
+
+// --- Brand plans -------------------------------------------------------------
+
+const sim3h = { durationS: 3 * 3600, kcal: 1800, intensityFactor: 0.68, cumTime: [0] };
+
+test("Maurten plan splits carbs between mix bottles and gels", () => {
+  const plan = buildPlan(sim3h, 18, "maurten");
+  assert.ok(plan.events.some((e) => e.type === "eat" && e.label.includes("Gel")));
+  assert.ok(plan.shopping.some((s) => s.label.includes("Drink Mix")));
+  assert.ok(plan.shopping.some((s) => s.label.includes("Gel")));
   assert.ok(Math.abs(plan.plannedCarbsG - plan.totalCarbsG) < plan.totalCarbsG * 0.35);
-  // events sorted, inside the ride, none in the final 15 minutes for food
-  let prev = -1;
-  for (const e of plan.events) {
-    assert.ok(e.timeS >= prev);
-    prev = e.timeS;
-    assert.ok(e.timeS < sim3h.durationS);
-    if (e.type === "eat") assert.ok(e.timeS <= sim3h.durationS - 14 * 60);
+  // Maurten is low sodium — expect a salt note.
+  assert.ok(plan.notes.some((n) => n.toLowerCase().includes("sodium") || n.includes("salt")));
+});
+
+test("Tailwind plan is drink-only with electrolytes covered", () => {
+  const plan = buildPlan(sim3h, 18, "tailwind");
+  assert.equal(plan.events.filter((e) => e.type === "eat").length, 0);
+  assert.ok(plan.events.some((e) => e.type === "drink" && e.carbsG > 0));
+  const scoops = plan.shopping.find((s) => s.label.includes("scoop"));
+  assert.ok(scoops && Math.abs(scoops.count * 25 - plan.totalCarbsG) <= 13);
+  assert.ok(plan.sodiumProvidedPerHour > 0);
+});
+
+test("Tailwind in the cold at high carb rates goes hypertonic with a water top-up note", () => {
+  // 4.5 h race pace at 0 °C: lots of carbs, little fluid.
+  const race = { durationS: 4.5 * 3600, kcal: 4000, intensityFactor: 0.88, cumTime: [0] };
+  const plan = buildPlan(race, 0, "tailwind");
+  const mix = plan.drinks[0];
+  assert.ok(mix.tonicity !== "isotonic", `got ${mix.tonicity} at ${mix.mOsm} mOsm/kg`);
+  assert.ok(plan.notes.some((n) => n.includes("plain water")));
+});
+
+test("Tailwind on a mild day at moderate rates stays in comfortable range", () => {
+  const plan = buildPlan(sim3h, 22, "tailwind");
+  const mix = plan.drinks[0];
+  assert.ok(mix.mOsm <= 500, `got ${mix.mOsm}`);
+});
+
+test("events are sorted, inside the ride, with no food in the final 15 min", () => {
+  for (const brand of ["maurten", "tailwind"]) {
+    const plan = buildPlan(sim3h, 18, brand);
+    let prev = -1;
+    for (const e of plan.events) {
+      assert.ok(e.timeS >= prev);
+      prev = e.timeS;
+      assert.ok(e.timeS < sim3h.durationS);
+      if (e.type === "eat") assert.ok(e.timeS <= sim3h.durationS - 14 * 60);
+    }
   }
 });
 
-test("buildPlan includes drink events and a shopping list", () => {
-  const plan = buildPlan(sim3h, 25);
-  assert.ok(plan.events.some((e) => e.type === "drink"));
-  assert.ok(plan.bottles >= 2);
-  assert.ok(plan.shopping.length > 0);
-  assert.ok(plan.sodiumPerHour > 0);
-});
-
-test("a short easy spin schedules no food", () => {
-  const plan = buildPlan({ durationS: 45 * 60, kcal: 400, intensityFactor: 0.55, cumTime: [0] }, 18);
-  assert.equal(plan.events.filter((e) => e.type === "eat").length, 0);
+test("a short easy spin schedules no food for either brand", () => {
+  const spin = { durationS: 45 * 60, kcal: 400, intensityFactor: 0.55, cumTime: [0] };
+  for (const brand of ["maurten", "tailwind"]) {
+    const plan = buildPlan(spin, 18, brand);
+    assert.equal(plan.events.filter((e) => e.type === "eat").length, 0);
+    assert.equal(plan.totalCarbsG, 0);
+  }
 });
 
 test("meal advice scales with body weight", () => {

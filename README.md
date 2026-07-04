@@ -20,10 +20,19 @@ Entirely client-side: no build step, no server, no dependencies. Open it and rid
 - **Fueling plan** — carb targets from mainstream sports-nutrition guidance
   (30–90 g/h by duration and intensity, capped at gut absorption), temperature-
   adjusted hydration and sodium, and a concrete timeline: *at 1:40, 42 km, eat
-  an energy gel*.
+  a gel / finish a bottle*.
+- **Fuel brands: Maurten or Tailwind** — pick your fuel and get brand-specific
+  bottle recipes. Maurten plans split carbs between Drink Mix 160/320 sachets
+  and Gel 100s; Tailwind plans put all fuel in the bottle as Endurance Fuel
+  scoops with its built-in electrolytes.
+- **Osmolality-aware mixing** — each bottle's osmolality is estimated from its
+  carb species (long-chain maltodextrin counts far fewer particles per gram
+  than dextrose/sucrose) plus sodium, then classified hypotonic → hypertonic.
+  Hypertonic Tailwind mixes get a plain-water top-up recommendation; Maurten's
+  hypertonic DM320 is flagged with its hydrogel context.
 - **Elevation chart** — SVG profile with eat/drink markers and a hover
   crosshair; the timeline table doubles as the accessible data view.
-- **Shopping list** — how many gels, bars, and bottles to pack.
+- **Shopping list** — how many sachets, gels, scoops, and bottles to pack.
 - **Pre/post-ride meals** — weight-based carb and protein guidance.
 - Light and dark theme, responsive layout.
 

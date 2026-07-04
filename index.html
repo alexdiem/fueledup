@@ -45,6 +45,20 @@
             </div>
           </div>
 
+          <fieldset class="brand-picker">
+            <legend>Fuel brand</legend>
+            <label class="brand-option">
+              <input type="radio" name="brand" value="maurten" checked />
+              <span><strong>Maurten</strong><br />
+                <span class="muted small">Hydrogel drink mixes + gels — high carbs at low osmotic cost</span></span>
+            </label>
+            <label class="brand-option">
+              <input type="radio" name="brand" value="tailwind" />
+              <span><strong>Tailwind</strong><br />
+                <span class="muted small">All fuel in the bottle — electrolytes built in</span></span>
+            </label>
+          </fieldset>
+
           <div class="field-row">
             <label>Effort
               <select id="intensity">
@@ -99,6 +113,15 @@
           <span><span class="dot dot-drink"></span>Finish a bottle</span>
         </div>
         <div id="chart"></div>
+      </div>
+
+      <div class="card">
+        <h3>Bottles &amp; mixing</h3>
+        <table class="timeline mixing">
+          <thead><tr><th>How many</th><th>Recipe</th><th>Strength</th><th>Osmolality</th></tr></thead>
+          <tbody id="mixing-body"></tbody>
+        </table>
+        <ul id="mix-notes" class="mix-notes small" hidden></ul>
       </div>
 
       <div class="grid-2">
