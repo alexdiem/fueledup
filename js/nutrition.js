@@ -204,21 +204,42 @@ function planMaurten(plan, brand, totalCarbsG, durationS) {
   }
 }
 
+// Largest half-scoop dose per bottle whose estimated osmolality stays out of
+// the truly hypertonic zone (> 500 mOsm/kg). For a 600 ml bottle this lands
+// on 2 scoops (~8.3%, ~440 mOsm/kg) — the classic strong-but-tolerable mix.
+export function maxScoopsPerBottle(brand) {
+  let k = 0.5;
+  for (;;) {
+    const next = k + 0.5;
+    const gPerL = (next * brand.scoop.carbsG) / (brand.bottleMl / 1000);
+    const naPerL = (next * brand.scoop.sodiumMg) / (brand.bottleMl / 1000);
+    if (estimateOsmolality(gPerL, brand.species, naPerL) > 500) return k;
+    k = next;
+  }
+}
+
 function planTailwind(plan, brand, totalCarbsG, durationS) {
   const hours = durationS / 3600;
   const bottles = Math.max(1, Math.ceil(plan.totalFluidMl / brand.bottleMl));
   const scoops = Math.round(totalCarbsG / brand.scoop.carbsG);
-  const perBottle = scoops / bottles;
+
+  // Concentrate: pack bottles up to the osmolality ceiling and leave the
+  // rest as plain water, rather than spreading scoops thin. Only when the
+  // carbs can't fit at the ceiling does the mix go stronger.
+  const maxPerBottle = maxScoopsPerBottle(brand);
+  const mixBottles = scoops > 0 ? Math.min(bottles, Math.ceil(scoops / maxPerBottle)) : 0;
+  const perBottle = mixBottles > 0 ? scoops / mixBottles : 0;
   const carbsPerBottle = perBottle * brand.scoop.carbsG;
+  const waterBottles = bottles - mixBottles;
 
   const gPerL = carbsPerBottle / (brand.bottleMl / 1000);
   const naPerL = (perBottle * brand.scoop.sodiumMg) / (brand.bottleMl / 1000);
   const mOsm = scoops > 0 ? estimateOsmolality(gPerL, brand.species, naPerL) : 0;
   const tonicity = scoops > 0 ? classifyTonicity(mOsm) : "hypotonic";
 
-  if (scoops > 0) {
+  if (mixBottles > 0) {
     plan.drinks.push({
-      count: bottles,
+      count: mixBottles,
       recipe: `${(Math.round(perBottle * 2) / 2).toFixed(1)} scoops in ${brand.bottleMl} ml`,
       carbsG: Math.round(carbsPerBottle),
       concentrationPct: Math.round(gPerL) / 10,
@@ -227,11 +248,22 @@ function planTailwind(plan, brand, totalCarbsG, durationS) {
       note: null,
     });
   }
+  if (waterBottles > 0) {
+    plan.drinks.push({
+      count: waterBottles,
+      recipe: "plain water",
+      carbsG: 0,
+      concentrationPct: 0,
+      mOsm: 0,
+      tonicity: "hypotonic",
+      note: null,
+    });
+  }
 
-  // Dextrose/sucrose are all monomers/dimers — past ~8% the mix goes
-  // hypertonic. Tailwind's answer is "mix strong, chase with water", so
-  // compute the plain-water top-up that brings overall intake back down.
-  if (scoops > 0 && gPerL > ISOTONIC_MAX_G_PER_L) {
+  // Every bottle already at the ceiling and the carbs still don't fit:
+  // Tailwind's answer is "mix strong, chase with water", so compute the
+  // plain-water top-up that brings overall intake back down.
+  if (scoops > 0 && tonicity === "hypertonic") {
     const topUpMl = Math.round((carbsPerBottle / (ISOTONIC_MAX_G_PER_L / 1000) - brand.bottleMl) / 10) * 10;
     plan.notes.push(
       `At ${plan.fluidPerHour} ml/h of fluid, hitting ${plan.carbsPerHour} g/h makes the mix ` +
@@ -242,12 +274,13 @@ function planTailwind(plan, brand, totalCarbsG, durationS) {
 
   const bottleLabels = [];
   for (let b = 0; b < bottles; b++) {
+    const isMix = b < mixBottles;
     bottleLabels.push({
-      label: scoops > 0
+      label: isMix
         ? `Finish bottle — ${brand.label} (${Math.round(carbsPerBottle)} g carbs)`
         : "Finish bottle — water",
       fluidMl: brand.bottleMl,
-      carbsG: Math.round(carbsPerBottle),
+      carbsG: isMix ? Math.round(carbsPerBottle) : 0,
     });
   }
   drinkEvents(plan.events, durationS, (brand.bottleMl / plan.fluidPerHour) * 3600, bottleLabels);
