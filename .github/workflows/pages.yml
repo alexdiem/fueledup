@@ -22,6 +22,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Stamp asset versions for cache busting
+        # Replaces the __BUILD__ placeholder in asset URLs with the commit
+        # SHA, so browsers re-fetch JS/CSS after every deploy instead of
+        # serving a stale cached mix of old and new files.
+        run: sed -i "s/__BUILD__/${GITHUB_SHA::7}/g" index.html js/app.js
       - uses: actions/configure-pages@v5
         with:
           # Creates the Pages site on first run, so no manual setup is needed.
