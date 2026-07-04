@@ -1,7 +1,7 @@
-import { parseGpx, buildRoute } from "./gpx.js";
-import { simulateRide, syntheticSegments, estimateFtp, INTENSITIES } from "./physics.js";
-import { buildPlan, mealAdvice } from "./nutrition.js";
-import { renderChart } from "./chart.js";
+import { parseGpx, buildRoute } from "./gpx.js?v=__BUILD__";
+import { simulateRide, syntheticSegments, estimateFtp, INTENSITIES } from "./physics.js?v=__BUILD__";
+import { buildPlan, mealAdvice } from "./nutrition.js?v=__BUILD__";
+import { renderChart } from "./chart.js?v=__BUILD__";
 
 const $ = (id) => document.getElementById(id);
 
