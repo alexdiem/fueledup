@@ -116,7 +116,7 @@ test("Tailwind concentrates bottles to the ceiling and leaves the rest as water"
   assert.ok(water, "surplus fluid should be plain water bottles");
   assert.ok(mix.recipe.startsWith("2.0 scoops"), `got ${mix.recipe}`);
   assert.ok(mix.mOsm <= 500, `got ${mix.mOsm}`);
-  assert.equal(plan.notes.some((n) => n.includes("plain water to keep")), false,
+  assert.equal(plan.notes.some((n) => n.includes("Chase it with")), false,
     "no top-up nag when bottles are within the ceiling");
 });
 
@@ -127,7 +127,20 @@ test("Tailwind at the standard 2-scoop mix carries no hypertonic warning", () =>
   const mix = plan.drinks.find((d) => d.carbsG > 0);
   assert.ok(mix.mOsm <= 500, `got ${mix.mOsm}`);
   assert.ok(mix.tonicity !== "hypertonic");
-  assert.equal(plan.notes.some((n) => n.includes("Chase each bottle")), false);
+  assert.equal(plan.notes.some((n) => n.includes("Chase it with")), false);
+});
+
+test("uneven scoop totals pack full bottles first instead of diluting the average", () => {
+  // 2.2 h endurance @ 30 °C: 5 scoops need to fill 4 fluid-driven bottles.
+  // Averaging (the old bug) gives 1.67 scoops/bottle, which displays as a
+  // diluted 1.5. Packing greedily should give 2, 2, 1 instead, plus water.
+  const ride = { durationS: 2.2 * 3600, kcal: 1200, intensityFactor: 0.68, cumTime: [0] };
+  const plan = buildPlan(ride, 30, "tailwind");
+  const doses = plan.drinks.filter((d) => d.carbsG > 0).map((d) => d.recipe);
+  assert.ok(doses.some((r) => r.startsWith("2.0 scoop")), `got ${doses}`);
+  assert.ok(doses.some((r) => r.startsWith("1.0 scoop")), `got ${doses}`);
+  assert.ok(!doses.some((r) => r.startsWith("1.5 scoop")), `got ${doses}`);
+  assert.ok(plan.drinks.some((d) => d.recipe === "plain water"));
 });
 
 test("events are sorted, inside the ride, with no food in the final 15 min", () => {
