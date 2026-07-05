@@ -72,6 +72,20 @@
               <span class="input-unit"><input type="number" id="temp" value="18" min="-10" max="45" step="1" /><span>°C</span></span>
             </label>
           </div>
+
+          <div class="field-row">
+            <label>Bottles you'll drink <span class="muted">(blank = estimate)</span>
+              <span class="input-unit"><input type="number" id="bottles" min="1" max="12" step="1" placeholder="auto" /><span>×</span></span>
+            </label>
+            <label>Bottle size
+              <select id="bottle-size">
+                <option value="500">500 ml</option>
+                <option value="600" selected>600 ml</option>
+                <option value="750">750 ml</option>
+                <option value="950">950 ml</option>
+              </select>
+            </label>
+          </div>
         </section>
 
         <section>
