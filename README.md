@@ -24,7 +24,8 @@ Entirely client-side: no build step, no server, no dependencies. Open it and rid
 - **Fuel brands: Maurten or Tailwind** — pick your fuel and get brand-specific
   bottle recipes. Maurten plans split carbs between Drink Mix 160/320 sachets
   and Gel 100s; Tailwind plans put all fuel in the bottle as Endurance Fuel
-  scoops with its built-in electrolytes.
+  scoops (packed to ~2 scoops per bottle — the osmolality ceiling — with any
+  surplus bottles as plain water) and its built-in electrolytes.
 - **Osmolality-aware mixing** — each bottle's osmolality is estimated from its
   carb species (long-chain maltodextrin counts far fewer particles per gram
   than dextrose/sucrose) plus sodium, then classified hypotonic → hypertonic.

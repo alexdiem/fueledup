@@ -8,6 +8,7 @@ import {
   mealAdvice,
   estimateOsmolality,
   classifyTonicity,
+  maxScoopsPerBottle,
   BRANDS,
   GUT_CAP_G_PER_H,
 } from "../js/nutrition.js";
@@ -95,14 +96,38 @@ test("Tailwind in the cold at high carb rates goes hypertonic with a water top-u
   const race = { durationS: 4.5 * 3600, kcal: 4000, intensityFactor: 0.88, cumTime: [0] };
   const plan = buildPlan(race, 0, "tailwind");
   const mix = plan.drinks[0];
-  assert.ok(mix.tonicity !== "isotonic", `got ${mix.tonicity} at ${mix.mOsm} mOsm/kg`);
+  assert.equal(mix.tonicity, "hypertonic", `got ${mix.tonicity} at ${mix.mOsm} mOsm/kg`);
   assert.ok(plan.notes.some((n) => n.includes("plain water")));
 });
 
-test("Tailwind on a mild day at moderate rates stays in comfortable range", () => {
-  const plan = buildPlan(sim3h, 22, "tailwind");
-  const mix = plan.drinks[0];
+test("the osmolality ceiling puts 2 scoops in a 600 ml Tailwind bottle", () => {
+  assert.equal(maxScoopsPerBottle(BRANDS.tailwind), 2);
+});
+
+test("Tailwind concentrates bottles to the ceiling and leaves the rest as water", () => {
+  // Hot easy 3 h ride: plenty of fluid, modest carbs — bottles should be
+  // packed to ~2 scoops with surplus bottles as plain water, not all
+  // bottles diluted evenly.
+  const easy = { durationS: 3 * 3600, kcal: 1400, intensityFactor: 0.55, cumTime: [0] };
+  const plan = buildPlan(easy, 30, "tailwind");
+  const mix = plan.drinks.find((d) => d.carbsG > 0);
+  const water = plan.drinks.find((d) => d.carbsG === 0);
+  assert.ok(mix, "expected mix bottles");
+  assert.ok(water, "surplus fluid should be plain water bottles");
+  assert.ok(mix.recipe.startsWith("2.0 scoops"), `got ${mix.recipe}`);
   assert.ok(mix.mOsm <= 500, `got ${mix.mOsm}`);
+  assert.equal(plan.notes.some((n) => n.includes("plain water to keep")), false,
+    "no top-up nag when bottles are within the ceiling");
+});
+
+test("Tailwind at the standard 2-scoop mix carries no hypertonic warning", () => {
+  // 2.5 h endurance, 22 °C: carbs fit at 2 scoops/bottle exactly.
+  const ride = { durationS: 2.5 * 3600, kcal: 1500, intensityFactor: 0.68, cumTime: [0] };
+  const plan = buildPlan(ride, 22, "tailwind");
+  const mix = plan.drinks.find((d) => d.carbsG > 0);
+  assert.ok(mix.mOsm <= 500, `got ${mix.mOsm}`);
+  assert.ok(mix.tonicity !== "hypertonic");
+  assert.equal(plan.notes.some((n) => n.includes("Chase each bottle")), false);
 });
 
 test("events are sorted, inside the ride, with no food in the final 15 min", () => {
