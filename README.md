@@ -21,6 +21,10 @@ Entirely client-side: no build step, no server, no dependencies. Open it and rid
   (30–90 g/h by duration and intensity, capped at gut absorption), temperature-
   adjusted hydration and sodium, and a concrete timeline: *at 1:40, 42 km, eat
   a gel / finish a bottle*.
+- **Your bottles, your rules** — tell it how many bottles of what size you'll
+  actually drink and the whole plan (fluid totals, mixing, schedule) follows;
+  leave it blank and hydration is estimated from temperature. If you plan far
+  below typical sweat losses, you get a gentle note rather than an override.
 - **Fuel brands: Maurten or Tailwind** — pick your fuel and get brand-specific
   bottle recipes. Maurten plans split carbs between Drink Mix 160/320 sachets
   and Gel 100s; Tailwind plans put all fuel in the bottle as Endurance Fuel

@@ -143,6 +143,44 @@ test("uneven scoop totals pack full bottles first instead of diluting the averag
   assert.ok(plan.drinks.some((d) => d.recipe === "plain water"));
 });
 
+// --- Rider-specified bottles -------------------------------------------------
+
+test("rider-specified bottles drive fluid totals and the shopping list", () => {
+  const plan = buildPlan(sim3h, 18, "tailwind", { bottles: 2, bottleMl: 750 });
+  assert.equal(plan.totalFluidMl, 1500);
+  assert.equal(plan.bottles, 2);
+  const bottleItem = plan.shopping.find((s) => s.label.includes("bottle"));
+  assert.equal(bottleItem.label, "750 ml bottle");
+  assert.equal(bottleItem.count, 2);
+  assert.ok(plan.events.filter((e) => e.type === "drink").length <= 2);
+});
+
+test("drinking far less than the sweat model suggests earns a gentle note", () => {
+  // 3 h at 30 °C on just 2 × 500 ml — well under the ~900 ml/h estimate.
+  const plan = buildPlan(sim3h, 30, "maurten", { bottles: 2, bottleMl: 500 });
+  assert.ok(plan.notes.some((n) => n.includes("typical sweat")), plan.notes.join(" | "));
+});
+
+test("bigger bottles raise the Tailwind scoop ceiling", () => {
+  assert.ok(maxScoopsPerBottle(BRANDS.tailwind, 950) > maxScoopsPerBottle(BRANDS.tailwind, 600));
+});
+
+test("a Maurten sachet mixes more dilute in a bigger bottle", () => {
+  const small = buildPlan(sim3h, 18, "maurten", { bottles: 3, bottleMl: 500 });
+  const big = buildPlan(sim3h, 18, "maurten", { bottles: 3, bottleMl: 750 });
+  const mixSmall = small.drinks.find((d) => d.carbsG > 0);
+  const mixBig = big.drinks.find((d) => d.carbsG > 0);
+  assert.ok(mixBig.mOsm < mixSmall.mOsm, `${mixBig.mOsm} vs ${mixSmall.mOsm}`);
+  assert.ok(mixBig.recipe.includes("750 ml"));
+});
+
+test("blank bottle count still auto-estimates from temperature", () => {
+  const auto = buildPlan(sim3h, 18, "tailwind", { bottles: NaN, bottleMl: 600 });
+  const legacy = buildPlan(sim3h, 18, "tailwind");
+  assert.equal(auto.totalFluidMl, legacy.totalFluidMl);
+  assert.equal(auto.bottles, legacy.bottles);
+});
+
 test("events are sorted, inside the ride, with no food in the final 15 min", () => {
   for (const brand of ["maurten", "tailwind"]) {
     const plan = buildPlan(sim3h, 18, brand);

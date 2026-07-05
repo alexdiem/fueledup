@@ -81,8 +81,12 @@ function generate() {
   showFormError("");
 
   const brand = document.querySelector('input[name="brand"]:checked')?.value ?? "maurten";
+  const hydration = {
+    bottles: parseInt($("bottles").value, 10), // NaN/blank → auto-estimate
+    bottleMl: parseInt($("bottle-size").value, 10),
+  };
   const sim = simulateRide(segments, rider);
-  const plan = buildPlan(sim, tempC, brand);
+  const plan = buildPlan(sim, tempC, brand, hydration);
 
   // Map event times to route distances via the per-point cumulative time.
   for (const ev of plan.events) {

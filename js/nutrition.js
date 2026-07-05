@@ -114,7 +114,8 @@ function drinkEvents(events, durationS, bottleIntervalS, labels) {
 
 function planMaurten(plan, brand, totalCarbsG, durationS) {
   const hours = durationS / 3600;
-  const bottles = Math.max(1, Math.round(plan.totalFluidMl / brand.bottleMl));
+  const bottleMl = plan.bottleMl;
+  const bottles = plan.fixedBottles ?? Math.max(1, Math.round(plan.totalFluidMl / bottleMl));
   const [dm160, dm320] = brand.drinkMixes;
 
   // Pick a mix strength from the carb rate; aim for ~60% of carbs from the
@@ -137,15 +138,17 @@ function planMaurten(plan, brand, totalCarbsG, durationS) {
     ? Math.max(0, Math.ceil((totalCarbsG - drinkCarbsG) / brand.gel.carbsG))
     : 0;
 
-  // Drink recipes with osmolality per bottle type.
+  // Drink recipes with osmolality per bottle type. Sachets are designed for
+  // 500 ml, but the math follows the rider's actual bottle size — a sachet
+  // in a 750 ml bottle simply mixes (and reads) more dilute.
   if (mix) {
-    const gPerL = mix.carbsG / (brand.bottleMl / 1000);
-    const naPerL = mix.sodiumMg / (brand.bottleMl / 1000);
+    const gPerL = mix.carbsG / (bottleMl / 1000);
+    const naPerL = mix.sodiumMg / (bottleMl / 1000);
     const mOsm = estimateOsmolality(gPerL, brand.species, naPerL);
     const tone = classifyTonicity(mOsm);
     plan.drinks.push({
       count: mixBottles,
-      recipe: `1 sachet ${mix.label} in ${brand.bottleMl} ml`,
+      recipe: `1 sachet ${mix.label} in ${bottleMl} ml`,
       carbsG: mix.carbsG,
       concentrationPct: gPerL / 10,
       mOsm,
@@ -185,15 +188,15 @@ function planMaurten(plan, brand, totalCarbsG, durationS) {
     const isMix = mix && b < mixBottles;
     bottleLabels.push({
       label: isMix ? `Finish bottle — ${mix.label}` : "Finish bottle — water",
-      fluidMl: brand.bottleMl,
+      fluidMl: bottleMl,
       carbsG: isMix ? mix.carbsG : 0,
     });
   }
-  drinkEvents(plan.events, durationS, (brand.bottleMl / plan.fluidPerHour) * 3600, bottleLabels);
+  drinkEvents(plan.events, durationS, (bottleMl / plan.fluidPerHour) * 3600, bottleLabels);
 
   if (mixBottles > 0) plan.shopping.push({ label: `sachet ${mix.label}`, count: mixBottles });
   if (gelCount > 0) plan.shopping.push({ label: `${brand.label} ${brand.gel.label}`, count: gelCount });
-  plan.shopping.push({ label: `${brand.bottleMl} ml bottle`, count: bottles });
+  plan.shopping.push({ label: `${bottleMl} ml bottle`, count: bottles });
 
   plan.sodiumProvidedPerHour = Math.round((mixBottles * (mix?.sodiumMg ?? 0)) / hours);
   if (totalCarbsG > 0 && plan.sodiumProvidedPerHour < plan.sodiumPerHour) {
@@ -206,13 +209,14 @@ function planMaurten(plan, brand, totalCarbsG, durationS) {
 
 // Largest half-scoop dose per bottle whose estimated osmolality stays out of
 // the truly hypertonic zone (> 500 mOsm/kg). For a 600 ml bottle this lands
-// on 2 scoops (~8.3%, ~440 mOsm/kg) — the classic strong-but-tolerable mix.
-export function maxScoopsPerBottle(brand) {
+// on 2 scoops (~8.3%, ~440 mOsm/kg) — the classic strong-but-tolerable mix;
+// a bigger bottle raises the ceiling proportionally.
+export function maxScoopsPerBottle(brand, bottleMl = brand.bottleMl) {
   let k = 0.5;
   for (;;) {
     const next = k + 0.5;
-    const gPerL = (next * brand.scoop.carbsG) / (brand.bottleMl / 1000);
-    const naPerL = (next * brand.scoop.sodiumMg) / (brand.bottleMl / 1000);
+    const gPerL = (next * brand.scoop.carbsG) / (bottleMl / 1000);
+    const naPerL = (next * brand.scoop.sodiumMg) / (bottleMl / 1000);
     if (estimateOsmolality(gPerL, brand.species, naPerL) > 500) return k;
     k = next;
   }
@@ -220,9 +224,10 @@ export function maxScoopsPerBottle(brand) {
 
 function planTailwind(plan, brand, totalCarbsG, durationS) {
   const hours = durationS / 3600;
-  const bottles = Math.max(1, Math.ceil(plan.totalFluidMl / brand.bottleMl));
+  const bottleMl = plan.bottleMl;
+  const bottles = plan.fixedBottles ?? Math.max(1, Math.ceil(plan.totalFluidMl / bottleMl));
   const scoops = Math.round(totalCarbsG / brand.scoop.carbsG);
-  const maxPerBottle = maxScoopsPerBottle(brand);
+  const maxPerBottle = maxScoopsPerBottle(brand, bottleMl);
   const capacity = bottles * maxPerBottle;
 
   // Pack bottles to the ceiling greedily — full-strength bottles first,
@@ -255,13 +260,13 @@ function planTailwind(plan, brand, totalCarbsG, durationS) {
   let worst = null;
   for (const [dose, count] of [...groups.entries()].sort((a, b) => b[0] - a[0])) {
     const carbsPerBottle = dose * brand.scoop.carbsG;
-    const gPerL = carbsPerBottle / (brand.bottleMl / 1000);
-    const naPerL = (dose * brand.scoop.sodiumMg) / (brand.bottleMl / 1000);
+    const gPerL = carbsPerBottle / (bottleMl / 1000);
+    const naPerL = (dose * brand.scoop.sodiumMg) / (bottleMl / 1000);
     const mOsm = estimateOsmolality(gPerL, brand.species, naPerL);
     const tonicity = classifyTonicity(mOsm);
     plan.drinks.push({
       count,
-      recipe: `${dose.toFixed(1)} scoop${dose === 1 ? "" : "s"} in ${brand.bottleMl} ml`,
+      recipe: `${dose.toFixed(1)} scoop${dose === 1 ? "" : "s"} in ${bottleMl} ml`,
       carbsG: Math.round(carbsPerBottle),
       concentrationPct: Math.round(gPerL) / 10,
       mOsm,
@@ -285,7 +290,7 @@ function planTailwind(plan, brand, totalCarbsG, durationS) {
   // Even packed to the ceiling, the carbs don't fit: Tailwind's answer is
   // "mix strong, chase with water" — size the top-up for the strongest bottle.
   if (worst && classifyTonicity(worst.mOsm) === "hypertonic") {
-    const topUpMl = Math.round((worst.carbsPerBottle / (ISOTONIC_MAX_G_PER_L / 1000) - brand.bottleMl) / 10) * 10;
+    const topUpMl = Math.round((worst.carbsPerBottle / (ISOTONIC_MAX_G_PER_L / 1000) - bottleMl) / 10) * 10;
     plan.notes.push(
       `At ${plan.fluidPerHour} ml/h of fluid, hitting ${plan.carbsPerHour} g/h means your strongest bottle ` +
       `(${worst.dose.toFixed(1)} scoops) comes out to ~${(worst.gPerL / 10).toFixed(1)}% ` +
@@ -301,14 +306,14 @@ function planTailwind(plan, brand, totalCarbsG, durationS) {
       label: dose > 0
         ? `Finish bottle — ${brand.label} (${Math.round(dose * brand.scoop.carbsG)} g carbs)`
         : "Finish bottle — water",
-      fluidMl: brand.bottleMl,
+      fluidMl: bottleMl,
       carbsG: Math.round(dose * brand.scoop.carbsG),
     });
   }
-  drinkEvents(plan.events, durationS, (brand.bottleMl / plan.fluidPerHour) * 3600, bottleLabels);
+  drinkEvents(plan.events, durationS, (bottleMl / plan.fluidPerHour) * 3600, bottleLabels);
 
   if (scoops > 0) plan.shopping.push({ label: brand.scoop.label, count: scoops });
-  plan.shopping.push({ label: `${brand.bottleMl} ml bottle`, count: bottles });
+  plan.shopping.push({ label: `${bottleMl} ml bottle`, count: bottles });
 
   plan.sodiumProvidedPerHour = Math.round((scoops * brand.scoop.sodiumMg) / hours);
   if (scoops > 0 && plan.sodiumProvidedPerHour >= plan.sodiumPerHour) {
@@ -326,13 +331,22 @@ function planTailwind(plan, brand, totalCarbsG, durationS) {
  * @param {object} sim result of simulateRide (durationS, kcal, intensityFactor…)
  * @param {number} tempC
  * @param {string} brandKey "maurten" | "tailwind"
+ * @param {object} [hydration] { bottles, bottleMl } — what the rider will
+ *   actually drink. When set, it drives total fluid, bottle count, and all
+ *   mixing math; when omitted, fluid is estimated from temperature.
  */
-export function buildPlan(sim, tempC, brandKey = "maurten") {
+export function buildPlan(sim, tempC, brandKey = "maurten", hydration = null) {
   const brand = BRANDS[brandKey] ?? BRANDS.maurten;
   const hours = sim.durationS / 3600;
   const carbsPerHour = carbTargetPerHour(sim.durationS, sim.intensityFactor);
   const totalCarbsG = sim.durationS > 3600 ? Math.round(carbsPerHour * hours) : 0;
-  const fluidPerH = fluidPerHour(tempC);
+
+  const bottleMl = hydration?.bottleMl > 0 ? hydration.bottleMl : brand.bottleMl;
+  const fixedBottles = hydration?.bottles > 0 ? Math.round(hydration.bottles) : null;
+  const estimatedPerH = fluidPerHour(tempC);
+  const totalFluidMl = fixedBottles
+    ? fixedBottles * bottleMl
+    : Math.round(estimatedPerH * hours);
 
   const plan = {
     brand: brand.label,
@@ -340,8 +354,10 @@ export function buildPlan(sim, tempC, brandKey = "maurten") {
     carbsPerHour,
     totalCarbsG,
     burnPerHour: Math.round(((sim.kcal / hours) * carbFraction(sim.intensityFactor)) / 4),
-    fluidPerHour: fluidPerH,
-    totalFluidMl: Math.round(fluidPerH * hours),
+    fluidPerHour: Math.round(totalFluidMl / hours),
+    totalFluidMl,
+    bottleMl,
+    fixedBottles,
     sodiumPerHour: sodiumPerHour(tempC),
     sodiumProvidedPerHour: 0,
     drinks: [],
@@ -350,6 +366,18 @@ export function buildPlan(sim, tempC, brandKey = "maurten") {
     notes: [],
   };
   plan.totalBurnG = Math.round(plan.burnPerHour * hours);
+
+  // Respect the rider's bottle plan, but flag a big gap vs the sweat model.
+  if (fixedBottles) {
+    const estimatedTotal = Math.round(estimatedPerH * hours);
+    if (totalFluidMl < estimatedTotal * 0.75) {
+      plan.notes.push(
+        `You're planning ${plan.fluidPerHour} ml/h of fluid; at ${tempC} °C typical sweat ` +
+        `losses are closer to ~${estimatedPerH} ml/h — fine for a shorter ride, but consider ` +
+        `an extra bottle if it's long or hot.`
+      );
+    }
+  }
 
   if (brand.key === "tailwind") planTailwind(plan, brand, totalCarbsG, sim.durationS);
   else planMaurten(plan, brand, totalCarbsG, sim.durationS);
