@@ -38,7 +38,11 @@ Entirely client-side: no build step, no server, no dependencies. Open it and rid
 - **Elevation chart** — SVG profile with eat/drink markers and a hover
   crosshair; the timeline table doubles as the accessible data view.
 - **Shopping list** — how many sachets, gels, scoops, and bottles to pack.
-- **Pre/post-ride meals** — weight-based carb and protein guidance.
+- **Pre/post-ride meals** — a per-ride pre-ride plan: carb target scaled to
+  ride length (1–2 g/kg), eating window that shifts earlier for hard efforts,
+  ~6 ml/kg of water with the meal, concrete example menus that add up to the
+  target, and a banana/gel top-up 20 min before rollout on long or hard days.
+  Post-ride: weight-based carb + protein recovery guidance.
 - Light and dark theme, responsive layout.
 
 ## Run it

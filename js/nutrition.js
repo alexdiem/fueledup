@@ -388,15 +388,76 @@ export function buildPlan(sim, tempC, brandKey = "maurten", hydration = null) {
   return plan;
 }
 
-// Pre/post-ride guidance (g of carbs), classic 1–2 g/kg pre, 1 g/kg + protein post.
-export function mealAdvice(weightKg, durationS) {
-  const long = durationS > 2.5 * 3600;
+// --- Pre/post-ride meals -----------------------------------------------------
+// Pre-ride: classic 1–2 g/kg carbs scaled to ride length, eaten early enough
+// to digest (earlier for hard efforts), with ~6 ml/kg of water (ACSM's
+// 5–7 ml/kg pre-exercise range). Post-ride: 1 g/kg carbs + ~0.3 g/kg protein.
+
+// Building blocks for example pre-ride menus (approximate carb counts).
+const PRE_RIDE_BASES = [
+  { label: "a bowl of oatmeal with honey", carbsG: 60 },
+  { label: "a bowl of rice or pasta", carbsG: 90 },
+];
+const PRE_RIDE_EXTRAS = [
+  { one: "a banana", many: "bananas", carbsG: 25 },
+  { one: "a slice of toast with jam", many: "slices of toast with jam", carbsG: 25 },
+  { one: "a glass of fruit juice", many: "glasses of fruit juice", carbsG: 25 },
+];
+
+// Compose an example menu around a base food, adding extras until it lands
+// within ~15 g of the target.
+function composeMenu(base, targetG) {
+  const counts = new Map();
+  let total = base.carbsG;
+  for (let i = 0; total <= targetG - 15 && i < 8; i++) {
+    const extra = PRE_RIDE_EXTRAS[i % PRE_RIDE_EXTRAS.length];
+    counts.set(extra, (counts.get(extra) ?? 0) + 1);
+    total += extra.carbsG;
+  }
+  const items = [base.label];
+  for (const [extra, n] of counts) items.push(n > 1 ? `${n} ${extra.many}` : extra.one);
+  return { items, carbsG: total };
+}
+
+export function mealAdvice(weightKg, durationS, intensityFactor = 0.68) {
+  const hours = durationS / 3600;
+  const hard = intensityFactor >= 0.78;
+
+  // Carb target grows with ride length: 1 g/kg for a spin, up to 2 g/kg
+  // before a long day out.
+  const gPerKg = hours > 2.5 ? 2 : hours > 1.5 ? 1.5 : 1;
+  const carbsG = Math.round(weightKg * gPerKg);
+
+  // Hard efforts want a longer digestion window; easy rides can eat closer
+  // to rollout.
+  const hoursBefore = hard ? "2½–3" : gPerKg >= 1.5 ? "2–3" : "1½–2";
+
+  // ~6 ml/kg of water with the meal, rounded to a sensible glassful.
+  const waterMl = Math.round((weightKg * 6) / 50) * 50;
+
+  // A last top-up before rolling out, for rides long or hard enough to care.
+  const topUp = hours > 1.5 || hard
+    ? { minutesBefore: 20, label: "a banana or an energy gel", carbsG: 25, waterMl: 250 }
+    : null;
+
+  // Offer each base as an example menu, but drop ones that can't get near
+  // the target (a rice bowl alone overshoots a light rider's short spin).
+  const allMenus = PRE_RIDE_BASES.map((base) => composeMenu(base, carbsG));
+  const nearTarget = allMenus.filter(
+    (m) => Math.abs(m.carbsG - carbsG) <= Math.max(30, carbsG * 0.3)
+  );
+
   return {
     pre: {
-      carbsG: Math.round(weightKg * (long ? 2 : 1)),
-      note: long
-        ? "Eat 2–3 h before you roll out — oats, rice, or toast with jam."
-        : "A light carb-based snack 1–2 h before is plenty.",
+      carbsG,
+      gPerKg,
+      hoursBefore,
+      waterMl,
+      menus: nearTarget.length ? nearTarget : allMenus.slice(0, 1),
+      topUp,
+      note: hard
+        ? "Keep it low in fat and fiber so it's out of your stomach by the start."
+        : "Anything familiar and carb-based works — don't experiment on ride day.",
     },
     post: {
       carbsG: Math.round(weightKg * 1),
