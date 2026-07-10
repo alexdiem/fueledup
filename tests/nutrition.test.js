@@ -9,6 +9,7 @@ import {
   estimateOsmolality,
   classifyTonicity,
   maxScoopsPerBottle,
+  sodiumPerHour,
   BRANDS,
   GUT_CAP_G_PER_H,
 } from "../js/nutrition.js";
@@ -250,4 +251,59 @@ test("the pre-start top-up appears for long or hard rides only", () => {
   assert.ok(mealAdvice(70, 1 * 3600, 0.88).pre.topUp);
   const topUp = mealAdvice(70, 3 * 3600).pre.topUp;
   assert.ok(topUp.carbsG > 0 && topUp.waterMl > 0 && topUp.minutesBefore > 0);
+});
+
+// --- Stacy Sims female-athlete tuning ---------------------------------------
+
+test("pre-ride includes protein and a don't-train-fasted cue", () => {
+  const pre = mealAdvice(70, 2 * 3600).pre;
+  assert.ok(pre.proteinG >= 15, `got ${pre.proteinG}`);
+  assert.match(pre.note, /protein/);
+  assert.match(pre.note, /fasted/);
+});
+
+test("post-ride protein is higher and the window is tighter (Sims)", () => {
+  const post = mealAdvice(70, 2 * 3600).post;
+  assert.ok(post.proteinG >= Math.round(70 * 0.4), `got ${post.proteinG}`);
+  assert.ok(post.proteinG >= 30, "at least a 30 g floor");
+  assert.equal(post.windowMin, 30);
+});
+
+test("sodium targets run higher than legacy guidance and scale with temp", () => {
+  // Legacy base was 500 mg/L → 300 mg/h at 600 ml/h; Sims base is higher.
+  assert.ok(sodiumPerHour(18) > 300, `got ${sodiumPerHour(18)}`);
+  assert.ok(sodiumPerHour(30) > sodiumPerHour(18));
+});
+
+test("luteal phase raises carbs, sodium, and protein", () => {
+  const base = buildPlan(sim3h, 22, "tailwind", null, "none");
+  const luteal = buildPlan(sim3h, 22, "tailwind", null, "luteal");
+  assert.ok(luteal.carbsPerHour > base.carbsPerHour, "carbs up");
+  assert.ok(luteal.sodiumPerHour > base.sodiumPerHour, "sodium up");
+  assert.ok(luteal.notes.some((n) => /high-hormone/i.test(n)), "phase note present");
+
+  const postBase = mealAdvice(70, 2 * 3600, 0.68, "none").post;
+  const postLuteal = mealAdvice(70, 2 * 3600, 0.68, "luteal").post;
+  assert.ok(postLuteal.proteinG > postBase.proteinG, "post protein up");
+});
+
+test("follicular and 'not tracking' use baseline targets", () => {
+  const none = buildPlan(sim3h, 22, "tailwind", null, "none");
+  const foll = buildPlan(sim3h, 22, "tailwind", null, "follicular");
+  assert.equal(foll.carbsPerHour, none.carbsPerHour);
+  assert.equal(foll.sodiumPerHour, none.sodiumPerHour);
+});
+
+test("carb rate stays capped at the gut limit even with the luteal bump", () => {
+  const race = { durationS: 5 * 3600, kcal: 4500, intensityFactor: 0.85, cumTime: [0] };
+  const plan = buildPlan(race, 30, "tailwind", null, "luteal");
+  assert.ok(plan.carbsPerHour <= GUT_CAP_G_PER_H, `got ${plan.carbsPerHour}`);
+});
+
+test("a genuinely hypertonic bottle carries the Sims hydration note", () => {
+  // 4.5 h race pace at 0 °C forces a strong, hypertonic Tailwind mix.
+  const race = { durationS: 4.5 * 3600, kcal: 4000, intensityFactor: 0.88, cumTime: [0] };
+  const plan = buildPlan(race, 0, "tailwind");
+  assert.ok(plan.notes.some((n) => /Sims/.test(n) && /hypotonic|dilute/.test(n)),
+    plan.notes.join(" | "));
 });

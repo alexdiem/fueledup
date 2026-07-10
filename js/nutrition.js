@@ -3,8 +3,43 @@
 // Carb targets follow mainstream sports-nutrition guidance (Jeukendrup):
 //   < 75 min: fuel optional; 1–2 h: ~30 g/h; 2–3 h: ~60 g/h; 3 h+: 80–90 g/h,
 // capped by realistic gut absorption for glucose+fructose mixes.
+//
+// Tuned for a female endurance athlete along Stacy Sims' lines ("women are
+// not small men"): sodium targets run higher than unisex guidance, protein
+// is emphasized before and after the ride, fasted training is discouraged,
+// and an optional menstrual-cycle phase nudges carbs, sodium, and protein in
+// the high-hormone luteal phase.
 
 export const GUT_CAP_G_PER_H = 90;
+
+// --- Menstrual-cycle phase (Sims) -------------------------------------------
+// In the high-hormone (luteal) phase, carbohydrate access and plasma volume
+// drop while protein breakdown rises, so carbs, sodium, and protein are all
+// nudged up and core-temperature guidance is added. "Not tracking" and the
+// low-hormone follicular phase use baseline (female) targets.
+export const CYCLE_PHASES = {
+  none: { key: "none", label: "Not tracking", carbMult: 1, sodiumMult: 1, proteinMult: 1, note: null },
+  follicular: {
+    key: "follicular",
+    label: "Follicular / low-hormone (≈ days 1–14)",
+    carbMult: 1,
+    sodiumMult: 1,
+    proteinMult: 1,
+    note: "Low-hormone phase — you access carbs well and recover fast, so this is a good window for your hardest efforts.",
+  },
+  luteal: {
+    key: "luteal",
+    label: "Luteal / high-hormone (≈ days 15–28)",
+    carbMult: 1.1,
+    sodiumMult: 1.25,
+    proteinMult: 1.15,
+    note: "High-hormone phase — carb access and plasma volume drop while protein breakdown rises, so carbs, sodium, and protein are bumped up. Core temp runs ~0.3–0.5 °C higher: pre-cool and drink cold, especially in the heat.",
+  },
+};
+
+export function cyclePhase(key) {
+  return CYCLE_PHASES[key] ?? CYCLE_PHASES.none;
+}
 
 // --- Fuel brands -----------------------------------------------------------
 // Product data is approximate, from public nutrition labels.
@@ -77,8 +112,10 @@ export function carbFraction(intensityFactor) {
   return Math.min(0.95, Math.max(0.35, 1.4 * intensityFactor - 0.2));
 }
 
-// Recommended carb intake rate (g/h) from ride duration and intensity.
-export function carbTargetPerHour(durationS, intensityFactor) {
+// Recommended carb intake rate (g/h) from ride duration and intensity,
+// scaled by an optional cycle-phase multiplier (carb access drops in the
+// luteal phase, so exogenous carbs matter more).
+export function carbTargetPerHour(durationS, intensityFactor, carbMult = 1) {
   const h = durationS / 3600;
   let rate;
   if (h < 1.25) rate = intensityFactor >= 0.75 ? 30 : 20;
@@ -88,7 +125,7 @@ export function carbTargetPerHour(durationS, intensityFactor) {
   else rate = 85;
   if (intensityFactor >= 0.8) rate += 10;
   else if (intensityFactor <= 0.6) rate -= 10;
-  return Math.max(0, Math.min(GUT_CAP_G_PER_H, rate));
+  return Math.max(0, Math.min(GUT_CAP_G_PER_H, Math.round(rate * carbMult)));
 }
 
 // Fluid needs (ml/h) from air temperature.
@@ -96,10 +133,12 @@ export function fluidPerHour(tempC) {
   return Math.round(Math.min(1000, Math.max(400, 400 + 25 * (tempC - 10))));
 }
 
-// Sodium (mg/h) — ~500 mg per liter of fluid, more when it's hot.
-export function sodiumPerHour(tempC) {
-  const mgPerL = tempC >= 25 ? 800 : 500;
-  return Math.round((fluidPerHour(tempC) / 1000) * mgPerL);
+// Sodium (mg/h). Sims recommends women run higher sodium than generic unisex
+// guidance — ~700 mg/L base, up to ~1000 in the heat — scaled by a cycle-phase
+// multiplier (plasma volume falls in the luteal phase, raising sodium needs).
+export function sodiumPerHour(tempC, sodiumMult = 1) {
+  const mgPerL = tempC >= 25 ? 1000 : 700;
+  return Math.round((fluidPerHour(tempC) / 1000) * mgPerL * sodiumMult);
 }
 
 // --- Plan building ---------------------------------------------------------
@@ -334,11 +373,13 @@ function planTailwind(plan, brand, totalCarbsG, durationS) {
  * @param {object} [hydration] { bottles, bottleMl } — what the rider will
  *   actually drink. When set, it drives total fluid, bottle count, and all
  *   mixing math; when omitted, fluid is estimated from temperature.
+ * @param {string} [phaseKey] menstrual-cycle phase ("none"|"follicular"|"luteal")
  */
-export function buildPlan(sim, tempC, brandKey = "maurten", hydration = null) {
+export function buildPlan(sim, tempC, brandKey = "maurten", hydration = null, phaseKey = "none") {
   const brand = BRANDS[brandKey] ?? BRANDS.maurten;
+  const phase = cyclePhase(phaseKey);
   const hours = sim.durationS / 3600;
-  const carbsPerHour = carbTargetPerHour(sim.durationS, sim.intensityFactor);
+  const carbsPerHour = carbTargetPerHour(sim.durationS, sim.intensityFactor, phase.carbMult);
   const totalCarbsG = sim.durationS > 3600 ? Math.round(carbsPerHour * hours) : 0;
 
   const bottleMl = hydration?.bottleMl > 0 ? hydration.bottleMl : brand.bottleMl;
@@ -358,14 +399,18 @@ export function buildPlan(sim, tempC, brandKey = "maurten", hydration = null) {
     totalFluidMl,
     bottleMl,
     fixedBottles,
-    sodiumPerHour: sodiumPerHour(tempC),
+    sodiumPerHour: sodiumPerHour(tempC, phase.sodiumMult),
     sodiumProvidedPerHour: 0,
+    cyclePhase: phase.key,
     drinks: [],
     events: [],
     shopping: [],
     notes: [],
   };
   plan.totalBurnG = Math.round(plan.burnPerHour * hours);
+
+  // Cycle-phase context (luteal bumps, follicular "go hard" cue).
+  if (phase.note) plan.notes.push(phase.note);
 
   // Respect the rider's bottle plan, but flag a big gap vs the sweat model.
   if (fixedBottles) {
@@ -382,6 +427,16 @@ export function buildPlan(sim, tempC, brandKey = "maurten", hydration = null) {
   if (brand.key === "tailwind") planTailwind(plan, brand, totalCarbsG, sim.durationS);
   else planMaurten(plan, brand, totalCarbsG, sim.durationS);
 
+  // Sims prefers keeping the drink hypotonic and taking carbs as food/gels
+  // rather than a strong bottle. Surface that only when a mix is genuinely
+  // hypertonic — the concentrated-bottle preference otherwise stands.
+  if (plan.drinks.some((d) => d.tonicity === "hypertonic")) {
+    plan.notes.push(
+      "Sims' take: a hypertonic bottle draws water into the gut and can slow you down. " +
+      "If it sits badly, dilute the bottle and move some carbs to gels or food."
+    );
+  }
+
   plan.events.sort((a, b) => a.timeS - b.timeS);
   plan.plannedCarbsG = plan.events.reduce((s, e) => s + (e.carbsG ?? 0), 0);
   plan.bottles = plan.shopping.find((s) => s.label.includes("bottle"))?.count ?? 1;
@@ -391,7 +446,10 @@ export function buildPlan(sim, tempC, brandKey = "maurten", hydration = null) {
 // --- Pre/post-ride meals -----------------------------------------------------
 // Pre-ride: classic 1–2 g/kg carbs scaled to ride length, eaten early enough
 // to digest (earlier for hard efforts), with ~6 ml/kg of water (ACSM's
-// 5–7 ml/kg pre-exercise range). Post-ride: 1 g/kg carbs + ~0.3 g/kg protein.
+// 5–7 ml/kg pre-exercise range) AND protein — Sims is emphatic that women
+// should not train fasted. Post-ride: 1 g/kg carbs + a higher ~0.4 g/kg
+// protein dose inside a ~30 min window (Sims), bumped further in the luteal
+// phase where protein breakdown rises.
 
 // Building blocks for example pre-ride menus (approximate carb counts).
 const PRE_RIDE_BASES = [
@@ -419,14 +477,18 @@ function composeMenu(base, targetG) {
   return { items, carbsG: total };
 }
 
-export function mealAdvice(weightKg, durationS, intensityFactor = 0.68) {
+export function mealAdvice(weightKg, durationS, intensityFactor = 0.68, phaseKey = "none") {
   const hours = durationS / 3600;
   const hard = intensityFactor >= 0.78;
+  const phase = cyclePhase(phaseKey);
 
   // Carb target grows with ride length: 1 g/kg for a spin, up to 2 g/kg
   // before a long day out.
   const gPerKg = hours > 2.5 ? 2 : hours > 1.5 ? 1.5 : 1;
   const carbsG = Math.round(weightKg * gPerKg);
+
+  // Protein with the pre-ride meal — Sims: women shouldn't train fasted.
+  const preProteinG = Math.round(weightKg * 0.3);
 
   // Hard efforts want a longer digestion window; easy rides can eat closer
   // to rollout.
@@ -451,18 +513,24 @@ export function mealAdvice(weightKg, durationS, intensityFactor = 0.68) {
     pre: {
       carbsG,
       gPerKg,
+      proteinG: preProteinG,
       hoursBefore,
       waterMl,
       menus: nearTarget.length ? nearTarget : allMenus.slice(0, 1),
       topUp,
-      note: hard
-        ? "Keep it low in fat and fiber so it's out of your stomach by the start."
-        : "Anything familiar and carb-based works — don't experiment on ride day.",
+      note:
+        (hard
+          ? "Keep it low in fat and fiber so it's out of your stomach by the start. "
+          : "Anything familiar and carb-based works — don't experiment on ride day. ") +
+        "Get the protein from Greek yogurt, eggs, or a scoop of powder — never head out fasted.",
     },
     post: {
+      // Sims: ~0.4 g/kg protein, at least 30 g, inside a ~30 min window;
+      // the luteal phase asks for a little more.
       carbsG: Math.round(weightKg * 1),
-      proteinG: Math.round(weightKg * 0.3),
-      note: "Within ~45 min of finishing, pair carbs with protein to kick-start recovery.",
+      proteinG: Math.max(30, Math.round(weightKg * 0.4 * phase.proteinMult)),
+      windowMin: 30,
+      note: "Within ~30 min of finishing, pair carbs with a solid protein hit to kick-start recovery.",
     },
   };
 }

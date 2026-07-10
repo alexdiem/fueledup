@@ -6,6 +6,11 @@ Upload a GPX route (or just describe your ride) and get a personalized fueling
 plan — how many carbs, calories, and how much fluid you need, and exactly when
 to eat and drink along the route.
 
+The nutrition guidance is tuned for a female endurance athlete along Stacy Sims'
+lines ("women are not small men"): higher sodium targets, protein emphasized
+before and after the ride, no fasted training, and an optional menstrual-cycle
+phase that adjusts carbs, sodium, and protein.
+
 Entirely client-side: no build step, no server, no dependencies. Open it and ride.
 
 ## Features
@@ -39,10 +44,16 @@ Entirely client-side: no build step, no server, no dependencies. Open it and rid
   crosshair; the timeline table doubles as the accessible data view.
 - **Shopping list** — how many sachets, gels, scoops, and bottles to pack.
 - **Pre/post-ride meals** — a per-ride pre-ride plan: carb target scaled to
-  ride length (1–2 g/kg), eating window that shifts earlier for hard efforts,
-  ~6 ml/kg of water with the meal, concrete example menus that add up to the
-  target, and a banana/gel top-up 20 min before rollout on long or hard days.
-  Post-ride: weight-based carb + protein recovery guidance.
+  ride length (1–2 g/kg), protein with the meal (never train fasted), eating
+  window that shifts earlier for hard efforts, ~6 ml/kg of water, concrete
+  example menus that add up to the target, and a banana/gel top-up 20 min
+  before rollout on long or hard days. Post-ride: ~1 g/kg carbs plus a higher
+  ~0.4 g/kg protein hit inside a ~30 min window.
+- **Female-athlete / Stacy Sims tuning** — higher sodium targets, pre- and
+  post-ride protein emphasis, and an optional menstrual-cycle phase. The
+  high-hormone (luteal) phase raises carbs, sodium, and protein and adds
+  thermoregulation guidance; a hypertonic bottle surfaces Sims' "keep it
+  hypotonic, take carbs as food" note without overriding your bottle choice.
 - Light and dark theme, responsive layout.
 
 ## Run it
