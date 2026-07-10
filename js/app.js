@@ -85,8 +85,9 @@ function generate() {
     bottles: parseInt($("bottles").value, 10), // NaN/blank → auto-estimate
     bottleMl: parseInt($("bottle-size").value, 10),
   };
+  const phase = $("cycle-phase").value;
   const sim = simulateRide(segments, rider);
-  const plan = buildPlan(sim, tempC, brand, hydration);
+  const plan = buildPlan(sim, tempC, brand, hydration, phase);
 
   // Map event times to route distances via the per-point cumulative time.
   for (const ev of plan.events) {
@@ -175,14 +176,15 @@ function renderResults(title, rider, sim, plan, tempC, profile) {
     `which is normal and expected.`;
 
   // Pre/post meals
-  const meals = mealAdvice(rider.weightKg, sim.durationS, sim.intensityFactor);
+  const meals = mealAdvice(rider.weightKg, sim.durationS, sim.intensityFactor, plan.cyclePhase);
   const menus = meals.pre.menus
     .map((m) => `<li>${m.items.join(" + ")} <span class="muted">(~${m.carbsG} g)</span></li>`)
     .join("");
   $("meal-pre").innerHTML = `
     <p><strong>${meals.pre.hoursBefore} h before rollout:</strong>
-      ~${meals.pre.carbsG} g of carbs (${meals.pre.gPerKg} g/kg) with
-      ~${meals.pre.waterMl} ml of water. ${meals.pre.note} For example:</p>
+      ~${meals.pre.carbsG} g of carbs (${meals.pre.gPerKg} g/kg) plus
+      ~${meals.pre.proteinG} g protein, with ~${meals.pre.waterMl} ml of water.
+      ${meals.pre.note} For example:</p>
     <ul class="shopping">${menus}</ul>
     ${meals.pre.topUp
       ? `<p><strong>~${meals.pre.topUp.minutesBefore} min before:</strong> ` +
