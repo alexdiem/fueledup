@@ -175,8 +175,20 @@ function renderResults(title, rider, sim, plan, tempC, profile) {
     `which is normal and expected.`;
 
   // Pre/post meals
-  const meals = mealAdvice(rider.weightKg, sim.durationS);
-  $("meal-pre").textContent = `~${meals.pre.carbsG} g carbs. ${meals.pre.note}`;
+  const meals = mealAdvice(rider.weightKg, sim.durationS, sim.intensityFactor);
+  const menus = meals.pre.menus
+    .map((m) => `<li>${m.items.join(" + ")} <span class="muted">(~${m.carbsG} g)</span></li>`)
+    .join("");
+  $("meal-pre").innerHTML = `
+    <p><strong>${meals.pre.hoursBefore} h before rollout:</strong>
+      ~${meals.pre.carbsG} g of carbs (${meals.pre.gPerKg} g/kg) with
+      ~${meals.pre.waterMl} ml of water. ${meals.pre.note} For example:</p>
+    <ul class="shopping">${menus}</ul>
+    ${meals.pre.topUp
+      ? `<p><strong>~${meals.pre.topUp.minutesBefore} min before:</strong> ` +
+        `${meals.pre.topUp.label} (~${meals.pre.topUp.carbsG} g) with another ` +
+        `${meals.pre.topUp.waterMl} ml of water.</p>`
+      : ""}`;
   $("meal-post").textContent =
     `~${meals.post.carbsG} g carbs + ${meals.post.proteinG} g protein. ${meals.post.note}`;
 

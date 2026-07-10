@@ -207,5 +207,47 @@ test("meal advice scales with body weight", () => {
   const a = mealAdvice(60, 3 * 3600);
   const b = mealAdvice(90, 3 * 3600);
   assert.ok(b.pre.carbsG > a.pre.carbsG);
+  assert.ok(b.pre.waterMl > a.pre.waterMl);
   assert.ok(b.post.proteinG > a.post.proteinG);
+});
+
+test("pre-ride carbs grow with ride length (1 to 2 g/kg)", () => {
+  assert.equal(mealAdvice(70, 1 * 3600).pre.gPerKg, 1);
+  assert.equal(mealAdvice(70, 2 * 3600).pre.gPerKg, 1.5);
+  assert.equal(mealAdvice(70, 4 * 3600).pre.gPerKg, 2);
+});
+
+test("hard efforts eat earlier and get GI-friendly advice", () => {
+  const easy = mealAdvice(70, 2 * 3600, 0.55);
+  const race = mealAdvice(70, 2 * 3600, 0.88);
+  assert.equal(race.pre.hoursBefore, "2½–3");
+  assert.notEqual(easy.pre.hoursBefore, race.pre.hoursBefore);
+  assert.ok(race.pre.note.includes("fat and fiber"));
+});
+
+test("pre-ride water is ~6 ml/kg with the meal", () => {
+  const { waterMl } = mealAdvice(70, 2 * 3600).pre;
+  assert.ok(waterMl >= 70 * 5 && waterMl <= 70 * 7, `got ${waterMl}`);
+});
+
+test("example menus land near the carb target", () => {
+  for (const weight of [55, 70, 90]) {
+    for (const hours of [1, 2, 4]) {
+      const { carbsG, menus } = mealAdvice(weight, hours * 3600).pre;
+      assert.ok(menus.length >= 1 && menus.length <= 2);
+      for (const menu of menus) {
+        assert.ok(menu.items.length >= 1);
+        assert.ok(Math.abs(menu.carbsG - carbsG) <= Math.max(30, carbsG * 0.3),
+          `${weight} kg / ${hours} h: menu ${menu.carbsG} g vs target ${carbsG} g`);
+      }
+    }
+  }
+});
+
+test("the pre-start top-up appears for long or hard rides only", () => {
+  assert.equal(mealAdvice(70, 1 * 3600, 0.55).pre.topUp, null);
+  assert.ok(mealAdvice(70, 3 * 3600, 0.68).pre.topUp);
+  assert.ok(mealAdvice(70, 1 * 3600, 0.88).pre.topUp);
+  const topUp = mealAdvice(70, 3 * 3600).pre.topUp;
+  assert.ok(topUp.carbsG > 0 && topUp.waterMl > 0 && topUp.minutesBefore > 0);
 });
