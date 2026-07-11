@@ -67,6 +67,12 @@ export const BRANDS = {
     hydrogel: false,
     bottleMl: 600,
     scoop: { label: "scoop Endurance Fuel", carbsG: 25, sodiumMg: 303 },
+    // Solid carbs to top up what a hypotonic bottle can't carry, eaten as
+    // ~30 g feedings (a SiS bar is two feedings).
+    chews: [
+      { key: "sis", label: "SiS Beta Fuel chew bar", carbsG: 60 },
+      { key: "226ers", label: "226ERS chew bar", carbsG: 30 },
+    ],
   },
 };
 
@@ -99,10 +105,6 @@ export function classifyTonicity(mOsm) {
   if (mOsm <= 500) return "mildly hypertonic";
   return "hypertonic";
 }
-
-// Concentration (g/L) above which a monomer-based drink stops being
-// comfortably isotonic — the classic ~8% sports-drink ceiling.
-export const ISOTONIC_MAX_G_PER_L = 80;
 
 // --- Physiology ------------------------------------------------------------
 
@@ -246,73 +248,79 @@ function planMaurten(plan, brand, totalCarbsG, durationS) {
   }
 }
 
-// Largest half-scoop dose per bottle whose estimated osmolality stays out of
-// the truly hypertonic zone (> 500 mOsm/kg). For a 600 ml bottle this lands
-// on 2 scoops (~8.3%, ~440 mOsm/kg) — the classic strong-but-tolerable mix;
-// a bigger bottle raises the ceiling proportionally.
-export function maxScoopsPerBottle(brand, bottleMl = brand.bottleMl) {
+// Largest half-scoop dose per bottle that keeps the drink HYPOTONIC
+// (< 260 mOsm/kg) — Sims' preferred zone (~3–4% carbs), where the bottle
+// hydrates fastest instead of pulling water into the gut. For a 600 ml
+// bottle this is 1 scoop (~4.2%, ~220 mOsm/kg); bigger bottles fit more.
+export function hypotonicScoopsPerBottle(brand, bottleMl = brand.bottleMl) {
   let k = 0.5;
   for (;;) {
     const next = k + 0.5;
     const gPerL = (next * brand.scoop.carbsG) / (bottleMl / 1000);
     const naPerL = (next * brand.scoop.sodiumMg) / (bottleMl / 1000);
-    if (estimateOsmolality(gPerL, brand.species, naPerL) > 500) return k;
+    if (classifyTonicity(estimateOsmolality(gPerL, brand.species, naPerL)) !== "hypotonic") {
+      return k;
+    }
     k = next;
   }
 }
 
+// Sims-style Tailwind plan: bottles stay hypotonic so they do their real job
+// (hydration); if the carb target doesn't fit in the bottles, accept a
+// slightly lower rate (~10% trim) and deliver the remainder as chew bars in
+// ~30 g feedings.
 function planTailwind(plan, brand, totalCarbsG, durationS) {
   const hours = durationS / 3600;
   const bottleMl = plan.bottleMl;
   const bottles = plan.fixedBottles ?? Math.max(1, Math.ceil(plan.totalFluidMl / bottleMl));
-  const scoops = Math.round(totalCarbsG / brand.scoop.carbsG);
-  const maxPerBottle = maxScoopsPerBottle(brand, bottleMl);
-  const capacity = bottles * maxPerBottle;
 
-  // Pack bottles to the ceiling greedily — full-strength bottles first,
-  // only the last one under-filled — instead of averaging total scoops
-  // across every bottle (which dilutes: 5 scoops over 3 bottles would
-  // otherwise become a flat 1.67 each). If the carbs don't fit even with
-  // every bottle at the ceiling, split evenly across all of them instead:
-  // there's no way to stay under the ceiling anyway, so one consistent
-  // (if hypertonic) mix beats an arbitrary lopsided one.
-  let doses = [];
-  if (scoops > 0) {
-    if (scoops <= capacity) {
-      let remaining = scoops;
-      while (remaining > 0) {
-        const dose = Math.min(maxPerBottle, remaining);
-        doses.push(dose);
-        remaining -= dose;
-      }
-    } else {
-      doses = Array(bottles).fill(scoops / bottles);
-    }
+  const dosePerBottle = hypotonicScoopsPerBottle(brand, bottleMl);
+  const bottleCapacityG = Math.round(bottles * dosePerBottle * brand.scoop.carbsG);
+
+  // Overflow → trim the target and move the rest to solids.
+  let solidsG = 0;
+  if (totalCarbsG > bottleCapacityG) {
+    const untrimmed = plan.carbsPerHour;
+    plan.carbsPerHour = Math.round(plan.carbsPerHour * 0.9);
+    totalCarbsG = Math.round(plan.carbsPerHour * hours);
+    plan.totalCarbsG = totalCarbsG;
+    solidsG = totalCarbsG - bottleCapacityG;
+    if (solidsG < 15) solidsG = 0; // not worth a feeding — close enough
+    plan.notes.push(
+      `Bottles stay hypotonic (Sims): the carb target is trimmed from ${untrimmed} to ` +
+      `${plan.carbsPerHour} g/h and ${solidsG} g moves to chew bars — wash each one down ` +
+      `with a good swig from your bottle.`
+    );
   }
-  // Round to the nearest half scoop — what you'd actually measure out.
-  doses = doses.map((d) => Math.round(d * 2) / 2);
+
+  // Pack the bottle share greedily at the hypotonic dose.
+  const bottleCarbsG = Math.min(totalCarbsG, bottleCapacityG);
+  let scoopsLeft = Math.round((bottleCarbsG / brand.scoop.carbsG) * 2) / 2;
+  const doses = [];
+  while (scoopsLeft > 0 && doses.length < bottles) {
+    const dose = Math.min(dosePerBottle, scoopsLeft);
+    doses.push(dose);
+    scoopsLeft -= dose;
+  }
   const waterBottles = bottles - doses.length;
+  const scoopsUsed = doses.reduce((s, d) => s + d, 0);
 
   const groups = new Map();
   for (const dose of doses) groups.set(dose, (groups.get(dose) ?? 0) + 1);
-
-  let worst = null;
   for (const [dose, count] of [...groups.entries()].sort((a, b) => b[0] - a[0])) {
     const carbsPerBottle = dose * brand.scoop.carbsG;
     const gPerL = carbsPerBottle / (bottleMl / 1000);
     const naPerL = (dose * brand.scoop.sodiumMg) / (bottleMl / 1000);
     const mOsm = estimateOsmolality(gPerL, brand.species, naPerL);
-    const tonicity = classifyTonicity(mOsm);
     plan.drinks.push({
       count,
       recipe: `${dose.toFixed(1)} scoop${dose === 1 ? "" : "s"} in ${bottleMl} ml`,
       carbsG: Math.round(carbsPerBottle),
       concentrationPct: Math.round(gPerL) / 10,
       mOsm,
-      tonicity,
+      tonicity: classifyTonicity(mOsm),
       note: null,
     });
-    if (!worst || mOsm > worst.mOsm) worst = { dose, gPerL, mOsm, carbsPerBottle };
   }
   if (waterBottles > 0) {
     plan.drinks.push({
@@ -326,16 +334,26 @@ function planTailwind(plan, brand, totalCarbsG, durationS) {
     });
   }
 
-  // Even packed to the ceiling, the carbs don't fit: Tailwind's answer is
-  // "mix strong, chase with water" — size the top-up for the strongest bottle.
-  if (worst && classifyTonicity(worst.mOsm) === "hypertonic") {
-    const topUpMl = Math.round((worst.carbsPerBottle / (ISOTONIC_MAX_G_PER_L / 1000) - bottleMl) / 10) * 10;
-    plan.notes.push(
-      `At ${plan.fluidPerHour} ml/h of fluid, hitting ${plan.carbsPerHour} g/h means your strongest bottle ` +
-      `(${worst.dose.toFixed(1)} scoops) comes out to ~${(worst.gPerL / 10).toFixed(1)}% ` +
-      `(${worst.mOsm} mOsm/kg, hypertonic). Chase it with ~${topUpMl} ml of plain water, ` +
-      `or split the load across an extra bottle if you have one.`
-    );
+  // Solid carbs as ~30 g feedings: SiS bars (60 g = two feedings) for bulk,
+  // a 226ERS bar (30 g) for an odd feeding, spread across the ride.
+  if (solidsG > 0) {
+    const [sis, small] = brand.chews;
+    const feedings = Math.max(1, Math.round(solidsG / 30));
+    const sisBars = Math.floor(feedings / 2);
+    const smallBars = feedings % 2;
+    if (sisBars > 0) plan.shopping.push({ label: `${sis.label} (${sis.carbsG} g)`, count: sisBars });
+    if (smallBars > 0) plan.shopping.push({ label: `${small.label} (${small.carbsG} g)`, count: smallBars });
+
+    const eatWindowS = durationS - 20 * 60 - 15 * 60;
+    const gap = feedings > 1 ? eatWindowS / (feedings - 1) : 0;
+    for (let i = 0; i < feedings; i++) {
+      plan.events.push({
+        type: "eat",
+        timeS: 20 * 60 + i * gap,
+        label: i < sisBars * 2 ? `½ ${sis.label}` : small.label,
+        carbsG: 30,
+      });
+    }
   }
 
   const bottleLabels = [];
@@ -351,13 +369,13 @@ function planTailwind(plan, brand, totalCarbsG, durationS) {
   }
   drinkEvents(plan.events, durationS, (bottleMl / plan.fluidPerHour) * 3600, bottleLabels);
 
-  if (scoops > 0) plan.shopping.push({ label: brand.scoop.label, count: scoops });
+  if (scoopsUsed > 0) plan.shopping.push({ label: brand.scoop.label, count: scoopsUsed });
   plan.shopping.push({ label: `${bottleMl} ml bottle`, count: bottles });
 
-  plan.sodiumProvidedPerHour = Math.round((scoops * brand.scoop.sodiumMg) / hours);
-  if (scoops > 0 && plan.sodiumProvidedPerHour >= plan.sodiumPerHour) {
+  plan.sodiumProvidedPerHour = Math.round((scoopsUsed * brand.scoop.sodiumMg) / hours);
+  if (scoopsUsed > 0 && plan.sodiumProvidedPerHour >= plan.sodiumPerHour) {
     plan.notes.push("Tailwind's built-in electrolytes cover your sodium needs — no extra salt required.");
-  } else if (scoops > 0) {
+  } else if (scoopsUsed > 0) {
     plan.notes.push(
       `You'll get ~${plan.sodiumProvidedPerHour} mg/h sodium from the mix but need ` +
       `~${plan.sodiumPerHour} mg/h — add a salt tab per hour.`

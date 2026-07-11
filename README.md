@@ -32,9 +32,11 @@ Entirely client-side: no build step, no server, no dependencies. Open it and rid
   below typical sweat losses, you get a gentle note rather than an override.
 - **Fuel brands: Maurten or Tailwind** — pick your fuel and get brand-specific
   bottle recipes. Maurten plans split carbs between Drink Mix 160/320 sachets
-  and Gel 100s; Tailwind plans put all fuel in the bottle as Endurance Fuel
-  scoops (packed to ~2 scoops per bottle — the osmolality ceiling — with any
-  surplus bottles as plain water) and its built-in electrolytes.
+  and Gel 100s. Tailwind plans keep every bottle **hypotonic** (1 scoop per
+  600 ml — Sims' fast-hydrating ~4% zone): if the carb target doesn't fit in
+  the bottles, the rate is trimmed ~10% and the remainder rides as chew bars
+  (SiS Beta Fuel 60 g / 226ERS 30 g) in ~30 g feedings washed down from the
+  bottle.
 - **Osmolality-aware mixing** — each bottle's osmolality is estimated from its
   carb species (long-chain maltodextrin counts far fewer particles per gram
   than dextrose/sucrose) plus sodium, then classified hypotonic → hypertonic.
