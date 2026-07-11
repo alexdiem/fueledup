@@ -8,7 +8,7 @@ import {
   mealAdvice,
   estimateOsmolality,
   classifyTonicity,
-  maxScoopsPerBottle,
+  hypotonicScoopsPerBottle,
   sodiumPerHour,
   BRANDS,
   GUT_CAP_G_PER_H,
@@ -83,65 +83,67 @@ test("Maurten plan splits carbs between mix bottles and gels", () => {
   assert.ok(plan.notes.some((n) => n.toLowerCase().includes("sodium") || n.includes("salt")));
 });
 
-test("Tailwind plan is drink-only with electrolytes covered", () => {
+test("Tailwind bottles stay hypotonic with the overflow in chew bars", () => {
   const plan = buildPlan(sim3h, 18, "tailwind");
-  assert.equal(plan.events.filter((e) => e.type === "eat").length, 0);
-  assert.ok(plan.events.some((e) => e.type === "drink" && e.carbsG > 0));
-  const scoops = plan.shopping.find((s) => s.label.includes("scoop"));
-  assert.ok(scoops && Math.abs(scoops.count * 25 - plan.totalCarbsG) <= 13);
+  for (const d of plan.drinks) {
+    if (d.carbsG > 0) assert.equal(d.tonicity, "hypotonic", `${d.recipe}: ${d.mOsm} mOsm/kg`);
+  }
+  const eats = plan.events.filter((e) => e.type === "eat");
+  assert.ok(eats.length > 0, "overflow carbs should become chew feedings");
+  assert.ok(eats.every((e) => e.carbsG === 30), "feedings are ~30 g");
+  assert.ok(plan.shopping.some((s) => /SiS Beta Fuel|226ERS/.test(s.label)));
   assert.ok(plan.sodiumProvidedPerHour > 0);
+  // Planned intake lands near the (trimmed) target.
+  assert.ok(Math.abs(plan.plannedCarbsG - plan.totalCarbsG) <= plan.totalCarbsG * 0.2,
+    `planned ${plan.plannedCarbsG} vs target ${plan.totalCarbsG}`);
 });
 
-test("Tailwind in the cold at high carb rates goes hypertonic with a water top-up note", () => {
-  // 4.5 h race pace at 0 °C: lots of carbs, little fluid.
+test("the hypotonic dose for a 600 ml Tailwind bottle is 1 scoop", () => {
+  assert.equal(hypotonicScoopsPerBottle(BRANDS.tailwind), 1);
+});
+
+test("overflowing carbs trims the rate ~10% and says so", () => {
+  const untrimmed = carbTargetPerHour(sim3h.durationS, sim3h.intensityFactor);
+  const plan = buildPlan(sim3h, 18, "tailwind");
+  assert.equal(plan.carbsPerHour, Math.round(untrimmed * 0.9));
+  assert.ok(plan.notes.some((n) => n.includes("hypotonic") && n.includes("chew")),
+    plan.notes.join(" | "));
+});
+
+test("Tailwind never mixes a hypertonic bottle, even cold at race pace", () => {
+  // 4.5 h race pace at 0 °C used to force a hypertonic mix; now the bottles
+  // hold their hypotonic dose and the rest rides in the jersey pocket.
   const race = { durationS: 4.5 * 3600, kcal: 4000, intensityFactor: 0.88, cumTime: [0] };
   const plan = buildPlan(race, 0, "tailwind");
-  const mix = plan.drinks[0];
-  assert.equal(mix.tonicity, "hypertonic", `got ${mix.tonicity} at ${mix.mOsm} mOsm/kg`);
-  assert.ok(plan.notes.some((n) => n.includes("plain water")));
+  for (const d of plan.drinks) {
+    assert.equal(d.tonicity, "hypotonic", `${d.recipe}: ${d.mOsm} mOsm/kg`);
+  }
+  assert.ok(plan.events.some((e) => e.type === "eat"), "chews carry the load");
+  // Big solid share: SiS 60 g bars appear as half-bar feedings.
+  assert.ok(plan.events.some((e) => e.label.startsWith("½ SiS")), "SiS bars for bulk");
 });
 
-test("the osmolality ceiling puts 2 scoops in a 600 ml Tailwind bottle", () => {
-  assert.equal(maxScoopsPerBottle(BRANDS.tailwind), 2);
-});
-
-test("Tailwind concentrates bottles to the ceiling and leaves the rest as water", () => {
-  // Hot easy 3 h ride: plenty of fluid, modest carbs — bottles should be
-  // packed to ~2 scoops with surplus bottles as plain water, not all
-  // bottles diluted evenly.
-  const easy = { durationS: 3 * 3600, kcal: 1400, intensityFactor: 0.55, cumTime: [0] };
+test("when carbs fit in hypotonic bottles, no trim and no chews", () => {
+  // Short-ish easy ride, plenty of bottles: target fits in the bottles.
+  const easy = { durationS: 1.6 * 3600, kcal: 700, intensityFactor: 0.55, cumTime: [0] };
   const plan = buildPlan(easy, 30, "tailwind");
-  const mix = plan.drinks.find((d) => d.carbsG > 0);
-  const water = plan.drinks.find((d) => d.carbsG === 0);
-  assert.ok(mix, "expected mix bottles");
-  assert.ok(water, "surplus fluid should be plain water bottles");
-  assert.ok(mix.recipe.startsWith("2.0 scoops"), `got ${mix.recipe}`);
-  assert.ok(mix.mOsm <= 500, `got ${mix.mOsm}`);
-  assert.equal(plan.notes.some((n) => n.includes("Chase it with")), false,
-    "no top-up nag when bottles are within the ceiling");
+  const untrimmed = carbTargetPerHour(easy.durationS, easy.intensityFactor);
+  assert.equal(plan.carbsPerHour, untrimmed, "no trim needed");
+  assert.equal(plan.events.filter((e) => e.type === "eat").length, 0);
+  for (const d of plan.drinks) {
+    if (d.carbsG > 0) assert.equal(d.tonicity, "hypotonic");
+  }
 });
 
-test("Tailwind at the standard 2-scoop mix carries no hypertonic warning", () => {
-  // 2.5 h endurance, 22 °C: carbs fit at 2 scoops/bottle exactly.
-  const ride = { durationS: 2.5 * 3600, kcal: 1500, intensityFactor: 0.68, cumTime: [0] };
-  const plan = buildPlan(ride, 22, "tailwind");
-  const mix = plan.drinks.find((d) => d.carbsG > 0);
-  assert.ok(mix.mOsm <= 500, `got ${mix.mOsm}`);
-  assert.ok(mix.tonicity !== "hypertonic");
-  assert.equal(plan.notes.some((n) => n.includes("Chase it with")), false);
-});
-
-test("uneven scoop totals pack full bottles first instead of diluting the average", () => {
-  // 2.2 h endurance @ 30 °C: 5 scoops need to fill 4 fluid-driven bottles.
-  // Averaging (the old bug) gives 1.67 scoops/bottle, which displays as a
-  // diluted 1.5. Packing greedily should give 2, 2, 1 instead, plus water.
-  const ride = { durationS: 2.2 * 3600, kcal: 1200, intensityFactor: 0.68, cumTime: [0] };
-  const plan = buildPlan(ride, 30, "tailwind");
-  const doses = plan.drinks.filter((d) => d.carbsG > 0).map((d) => d.recipe);
-  assert.ok(doses.some((r) => r.startsWith("2.0 scoop")), `got ${doses}`);
-  assert.ok(doses.some((r) => r.startsWith("1.0 scoop")), `got ${doses}`);
-  assert.ok(!doses.some((r) => r.startsWith("1.5 scoop")), `got ${doses}`);
-  assert.ok(plan.drinks.some((d) => d.recipe === "plain water"));
+test("chew shopping list mixes SiS 60 g bars with a 226ERS 30 g odd bar", () => {
+  // Odd number of 30 g feedings → floor(n/2) SiS bars + one 226ERS.
+  const race = { durationS: 4.5 * 3600, kcal: 4000, intensityFactor: 0.88, cumTime: [0] };
+  const plan = buildPlan(race, 0, "tailwind");
+  const sis = plan.shopping.find((s) => s.label.includes("SiS"));
+  const small = plan.shopping.find((s) => s.label.includes("226ERS"));
+  const feedings = plan.events.filter((e) => e.type === "eat").length;
+  const covered = (sis?.count ?? 0) * 2 + (small?.count ?? 0);
+  assert.equal(covered, feedings, "every feeding is backed by a bar in the list");
 });
 
 // --- Rider-specified bottles -------------------------------------------------
@@ -162,8 +164,8 @@ test("drinking far less than the sweat model suggests earns a gentle note", () =
   assert.ok(plan.notes.some((n) => n.includes("typical sweat")), plan.notes.join(" | "));
 });
 
-test("bigger bottles raise the Tailwind scoop ceiling", () => {
-  assert.ok(maxScoopsPerBottle(BRANDS.tailwind, 950) > maxScoopsPerBottle(BRANDS.tailwind, 600));
+test("bigger bottles raise the Tailwind hypotonic dose", () => {
+  assert.ok(hypotonicScoopsPerBottle(BRANDS.tailwind, 950) > hypotonicScoopsPerBottle(BRANDS.tailwind, 600));
 });
 
 test("a Maurten sachet mixes more dilute in a bigger bottle", () => {
@@ -301,9 +303,11 @@ test("carb rate stays capped at the gut limit even with the luteal bump", () => 
 });
 
 test("a genuinely hypertonic bottle carries the Sims hydration note", () => {
-  // 4.5 h race pace at 0 °C forces a strong, hypertonic Tailwind mix.
+  // Tailwind never mixes hypertonic anymore, but Maurten's DM320 sachet in
+  // its designed 500 ml is hypertonic — the note should surface there.
   const race = { durationS: 4.5 * 3600, kcal: 4000, intensityFactor: 0.88, cumTime: [0] };
-  const plan = buildPlan(race, 0, "tailwind");
+  const plan = buildPlan(race, 18, "maurten", { bottles: 3, bottleMl: 500 });
+  assert.ok(plan.drinks.some((d) => d.tonicity === "hypertonic"), "DM320 in 500 ml is hypertonic");
   assert.ok(plan.notes.some((n) => /Sims/.test(n) && /hypotonic|dilute/.test(n)),
     plan.notes.join(" | "));
 });
