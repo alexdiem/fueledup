@@ -247,6 +247,36 @@ test("example menus land near the carb target", () => {
   }
 });
 
+// --- Early-morning starts ------------------------------------------------
+
+test("early start moves the carb load to the night before plus a wake-up snack", () => {
+  const pre = mealAdvice(68, 2.5 * 3600, 0.68, "none", true).pre;
+  assert.equal(pre.early, true);
+  assert.ok(pre.eveningCarbsG >= 68 * 1.5, `evening ${pre.eveningCarbsG}`);
+  assert.ok(pre.wakeCarbsG >= 30 && pre.wakeCarbsG <= 40, `wake ${pre.wakeCarbsG}`);
+  assert.ok(pre.wakeProteinG >= 10);
+  assert.ok(pre.waterMl > 0);
+  assert.equal(pre.topUp, null, "wake snack replaces the separate top-up");
+  assert.ok(pre.menus.length >= 3, "quick wake-up options offered");
+  assert.match(pre.note, /fasted/);
+});
+
+test("early start begins in-ride fueling at ~10 min instead of 20", () => {
+  const normal = buildPlan(sim3h, 18, "maurten", null, "none", false);
+  const early = buildPlan(sim3h, 18, "maurten", null, "none", true);
+  const firstEat = (p) => p.events.filter((e) => e.type === "eat")[0]?.timeS;
+  assert.equal(firstEat(normal), 20 * 60);
+  assert.equal(firstEat(early), 10 * 60);
+  assert.ok(early.notes.some((n) => n.includes("Early start")), early.notes.join(" | "));
+  assert.equal(normal.notes.some((n) => n.includes("Early start")), false);
+});
+
+test("early start also shifts Tailwind chew feedings earlier", () => {
+  const early = buildPlan(sim3h, 18, "tailwind", null, "none", true);
+  const firstEat = early.events.filter((e) => e.type === "eat")[0];
+  assert.equal(firstEat.timeS, 10 * 60);
+});
+
 test("the pre-start top-up appears for long or hard rides only", () => {
   assert.equal(mealAdvice(70, 1 * 3600, 0.55).pre.topUp, null);
   assert.ok(mealAdvice(70, 3 * 3600, 0.68).pre.topUp);

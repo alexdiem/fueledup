@@ -213,12 +213,12 @@ function planMaurten(plan, brand, totalCarbsG, durationS) {
 
   // Timeline: gels spread across the ride, bottle finishes by fluid rate.
   if (gelCount > 0) {
-    const eatWindowS = durationS - 20 * 60 - 15 * 60;
+    const eatWindowS = durationS - plan.eatStartS - 15 * 60;
     const gap = gelCount > 1 ? eatWindowS / (gelCount - 1) : 0;
     for (let i = 0; i < gelCount; i++) {
       plan.events.push({
         type: "eat",
-        timeS: 20 * 60 + i * gap,
+        timeS: plan.eatStartS + i * gap,
         label: `${brand.label} ${brand.gel.label}`,
         carbsG: brand.gel.carbsG,
       });
@@ -344,12 +344,12 @@ function planTailwind(plan, brand, totalCarbsG, durationS) {
     if (sisBars > 0) plan.shopping.push({ label: `${sis.label} (${sis.carbsG} g)`, count: sisBars });
     if (smallBars > 0) plan.shopping.push({ label: `${small.label} (${small.carbsG} g)`, count: smallBars });
 
-    const eatWindowS = durationS - 20 * 60 - 15 * 60;
+    const eatWindowS = durationS - plan.eatStartS - 15 * 60;
     const gap = feedings > 1 ? eatWindowS / (feedings - 1) : 0;
     for (let i = 0; i < feedings; i++) {
       plan.events.push({
         type: "eat",
-        timeS: 20 * 60 + i * gap,
+        timeS: plan.eatStartS + i * gap,
         label: i < sisBars * 2 ? `½ ${sis.label}` : small.label,
         carbsG: 30,
       });
@@ -393,7 +393,7 @@ function planTailwind(plan, brand, totalCarbsG, durationS) {
  *   mixing math; when omitted, fluid is estimated from temperature.
  * @param {string} [phaseKey] menstrual-cycle phase ("none"|"follicular"|"luteal")
  */
-export function buildPlan(sim, tempC, brandKey = "maurten", hydration = null, phaseKey = "none") {
+export function buildPlan(sim, tempC, brandKey = "maurten", hydration = null, phaseKey = "none", earlyStart = false) {
   const brand = BRANDS[brandKey] ?? BRANDS.maurten;
   const phase = cyclePhase(phaseKey);
   const hours = sim.durationS / 3600;
@@ -420,6 +420,10 @@ export function buildPlan(sim, tempC, brandKey = "maurten", hydration = null, ph
     sodiumPerHour: sodiumPerHour(tempC, phase.sodiumMult),
     sodiumProvidedPerHour: 0,
     cyclePhase: phase.key,
+    earlyStart,
+    // After an early start with only a wake-up snack, glycogen isn't fully
+    // topped — begin in-ride fueling almost immediately instead of at 20 min.
+    eatStartS: earlyStart ? 10 * 60 : 20 * 60,
     drinks: [],
     events: [],
     shopping: [],
@@ -429,6 +433,13 @@ export function buildPlan(sim, tempC, brandKey = "maurten", hydration = null, ph
 
   // Cycle-phase context (luteal bumps, follicular "go hard" cue).
   if (phase.note) plan.notes.push(phase.note);
+
+  if (earlyStart && totalCarbsG > 0) {
+    plan.notes.push(
+      "Early start: you're rolling out on last night's dinner plus a small snack, so glycogen " +
+      "isn't fully topped up — start fueling in the first 10–15 min and keep the feedings regular."
+    );
+  }
 
   // Respect the rider's bottle plan, but flag a big gap vs the sweat model.
   if (fixedBottles) {
@@ -495,10 +506,48 @@ function composeMenu(base, targetG) {
   return { items, carbsG: total };
 }
 
-export function mealAdvice(weightKg, durationS, intensityFactor = 0.68, phaseKey = "none") {
+// Quick, low-fiber wake-up options for early starts (~30 min before rollout).
+const WAKE_UP_OPTIONS = [
+  { label: "a banana + a small pot of Greek yogurt", carbsG: 35, proteinG: 10 },
+  { label: "a slice of toast with jam + a glass of milk", carbsG: 35, proteinG: 8 },
+  { label: "a small bowl of instant oats with honey", carbsG: 40, proteinG: 6 },
+];
+
+export function mealAdvice(weightKg, durationS, intensityFactor = 0.68, phaseKey = "none", earlyStart = false) {
   const hours = durationS / 3600;
   const hard = intensityFactor >= 0.78;
   const phase = cyclePhase(phaseKey);
+
+  const post = {
+    // Sims: ~0.4 g/kg protein, at least 30 g, inside a ~30 min window;
+    // the luteal phase asks for a little more.
+    carbsG: Math.round(weightKg * 1),
+    proteinG: Math.max(30, Math.round(weightKg * 0.4 * phase.proteinMult)),
+    windowMin: 30,
+    note: "Within ~30 min of finishing, pair carbs with a solid protein hit to kick-start recovery.",
+  };
+
+  // Early-morning start: no 2–3 h digestion window exists, so the real carb
+  // load moves to the night before and the morning gets a small, fast
+  // wake-up snack — Sims' "something beats fasted" rule, which matters more
+  // for women (fasted rides spike cortisol harder).
+  if (earlyStart) {
+    return {
+      pre: {
+        early: true,
+        eveningCarbsG: Math.round(weightKg * (hours > 2.5 ? 2 : 1.5)),
+        wakeCarbsG: Math.round(weightKg * 0.5),
+        wakeProteinG: Math.max(10, Math.round(weightKg * 0.15)),
+        waterMl: Math.round((weightKg * 5) / 50) * 50,
+        menus: WAKE_UP_OPTIONS.map((o) => ({ items: [o.label], carbsG: o.carbsG })),
+        topUp: null,
+        note:
+          "Keep the wake-up snack small, familiar, and low in fiber — coffee is fine. " +
+          "Riding fully fasted is the one thing to avoid.",
+      },
+      post,
+    };
+  }
 
   // Carb target grows with ride length: 1 g/kg for a spin, up to 2 g/kg
   // before a long day out.
@@ -542,13 +591,6 @@ export function mealAdvice(weightKg, durationS, intensityFactor = 0.68, phaseKey
           : "Anything familiar and carb-based works — don't experiment on ride day. ") +
         "Get the protein from Greek yogurt, eggs, or a scoop of powder — never head out fasted.",
     },
-    post: {
-      // Sims: ~0.4 g/kg protein, at least 30 g, inside a ~30 min window;
-      // the luteal phase asks for a little more.
-      carbsG: Math.round(weightKg * 1),
-      proteinG: Math.max(30, Math.round(weightKg * 0.4 * phase.proteinMult)),
-      windowMin: 30,
-      note: "Within ~30 min of finishing, pair carbs with a solid protein hit to kick-start recovery.",
-    },
+    post,
   };
 }
