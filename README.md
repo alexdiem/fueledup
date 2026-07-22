@@ -51,6 +51,11 @@ Entirely client-side: no build step, no server, no dependencies. Open it and rid
   example menus that add up to the target, and a banana/gel top-up 20 min
   before rollout on long or hard days. Post-ride: ~1 g/kg carbs plus a higher
   ~0.4 g/kg protein hit inside a ~30 min window.
+- **Early-morning starts** — flag a ride as "no time for a full pre-ride
+  meal" and the plan adapts: the carb load moves to a carb-rich dinner the
+  night before, the morning gets a small quick wake-up snack (~0.5 g/kg carbs
+  + protein, ~30 min before rollout, coffee approved), and in-ride fueling
+  starts at ~10 min instead of 20 since glycogen isn't fully topped.
 - **Female-athlete / Stacy Sims tuning** — higher sodium targets, pre- and
   post-ride protein emphasis, and an optional menstrual-cycle phase. The
   high-hormone (luteal) phase raises carbs, sodium, and protein and adds

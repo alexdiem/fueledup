@@ -86,8 +86,9 @@ function generate() {
     bottleMl: parseInt($("bottle-size").value, 10),
   };
   const phase = $("cycle-phase").value;
+  const earlyStart = $("early-start").checked;
   const sim = simulateRide(segments, rider);
-  const plan = buildPlan(sim, tempC, brand, hydration, phase);
+  const plan = buildPlan(sim, tempC, brand, hydration, phase, earlyStart);
 
   // Map event times to route distances via the per-point cumulative time.
   for (const ev of plan.events) {
@@ -176,11 +177,22 @@ function renderResults(title, rider, sim, plan, tempC, profile) {
     `which is normal and expected.`;
 
   // Pre/post meals
-  const meals = mealAdvice(rider.weightKg, sim.durationS, sim.intensityFactor, plan.cyclePhase);
+  const meals = mealAdvice(
+    rider.weightKg, sim.durationS, sim.intensityFactor, plan.cyclePhase, plan.earlyStart
+  );
   const menus = meals.pre.menus
     .map((m) => `<li>${m.items.join(" + ")} <span class="muted">(~${m.carbsG} g)</span></li>`)
     .join("");
-  $("meal-pre").innerHTML = `
+  $("meal-pre").innerHTML = meals.pre.early
+    ? `
+    <p><strong>The night before:</strong> make dinner carb-rich —
+      ~${meals.pre.eveningCarbsG} g of carbs (rice, pasta, or potatoes) does the
+      pre-ride meal's job while you sleep.</p>
+    <p><strong>On waking (~30 min before rollout):</strong>
+      ~${meals.pre.wakeCarbsG} g of quick carbs + ~${meals.pre.wakeProteinG} g protein,
+      with ~${meals.pre.waterMl} ml of water. ${meals.pre.note} For example:</p>
+    <ul class="shopping">${menus}</ul>`
+    : `
     <p><strong>${meals.pre.hoursBefore} h before rollout:</strong>
       ~${meals.pre.carbsG} g of carbs (${meals.pre.gPerKg} g/kg) plus
       ~${meals.pre.proteinG} g protein, with ~${meals.pre.waterMl} ml of water.

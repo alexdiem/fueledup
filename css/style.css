@@ -262,6 +262,18 @@ input:focus, select:focus { outline: 2px solid var(--series-1); outline-offset: 
 .shopping { margin: 0 0 16px; padding-left: 20px; }
 .shopping li { margin: 4px 0; }
 
+.check-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  cursor: pointer;
+}
+.check-row input {
+  width: auto;
+  margin: 0;
+  accent-color: var(--series-1);
+}
+
 .meal-block { margin-bottom: 16px; }
 .meal-block p { margin: 0 0 8px; }
 .meal-block ul { margin: 0 0 10px; }
